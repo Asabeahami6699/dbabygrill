@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { useRoute } from './hooks/useRoute';
 import { geocodeAddress } from '../../lib/geocode';
+import { getMapTileLayerConfig } from '../../lib/mapTiles';
 
 // ── Leaflet default icon fix for bundlers ────────────────────────────────
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -150,15 +151,8 @@ export default function DeliveryMap({
       preferCanvas:       true,
     }).setView([5.6037, -0.1870], 13); // Accra default
 
-    L.tileLayer(
-      'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png',
-      {
-        maxZoom: 20,
-        attribution:
-          '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> ' +
-          '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
-      }
-    ).addTo(map);
+    const tiles = getMapTileLayerConfig();
+    L.tileLayer(tiles.url, tiles.options).addTo(map);
 
     mapRef.current = map;
     setMapReady(true);
