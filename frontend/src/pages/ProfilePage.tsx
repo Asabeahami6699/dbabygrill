@@ -8,6 +8,8 @@ interface ProfileData {
   phone: string;
   address: string;
   city: string;
+  region?: string;
+  landmark?: string;
   postal_code: string;
 }
 
