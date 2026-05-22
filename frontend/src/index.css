@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ensure content doesn't hide behind fixed navbar */
+body {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+  body {
+    padding-top: 96px; /* Height of fixed navbar on mobile (h-24) */
+    padding-bottom: 64px; /* Height of fixed bottom nav */
+  }
+}
+
+/* Tablet and desktop */
+@media (min-width: 769px) {
+  body {
+    padding-top: 64px; /* Height of fixed navbar on desktop (h-16) */
+  }
+}
+
+/* Safe area for notched phones */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  @media (max-width: 768px) {
+    body {
+      padding-bottom: calc(64px + env(safe-area-inset-bottom));
+    }
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #f97316;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ea580c;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Remove focus outline for mouse users, keep for keyboard */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid #f97316;
+  outline-offset: 2px;
+}
