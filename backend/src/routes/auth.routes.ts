@@ -690,26 +690,41 @@ router.put('/profile', authenticate, async (req: AuthRequest, res: Response) => 
 });
 
 // ======================
-// RESET PASSWORD
+// RESET PASSWORD (request email)
 // ======================
+const frontendBaseUrl = () =>
+  (process.env.FRONTEND_URL || process.env.SITE_URL || 'http://localhost:5173').replace(
+    /\/$/,
+    ''
+  );
+
 router.post('/reset-password', async (req: Request, res: Response) => {
   try {
-    const { email } = req.body;
+    const email = String(req.body?.email || '')
+      .trim()
+      .toLowerCase();
 
     if (!email) {
       return res.status(400).json({ error: 'Email is required' });
     }
 
     const { error } = await supabaseAuth.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password`,
+      redirectTo: `${frontendBaseUrl()}/reset-password`,
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Reset password email error:', error);
+      // Do not reveal whether the email exists
+    }
 
-    res.json({ success: true, message: 'Password reset email sent' });
+    return res.json({
+      success: true,
+      message:
+        'If an account exists for this email, a password reset link has been sent.',
+    });
   } catch (error: any) {
     console.error('Reset password error:', error);
-    res.status(500).json({ error: error.message || 'Failed to send reset email' });
+    return res.status(500).json({ error: 'Failed to send reset email' });
   }
 });
 
