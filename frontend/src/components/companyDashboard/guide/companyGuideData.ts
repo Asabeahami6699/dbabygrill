@@ -7,7 +7,7 @@ export type CompanyTab =
   | 'analytics'
   | 'settings';
 
-export type SettingsSubTab = 'company' | 'delivery-areas' | 'pickup-branches' | 'delivery-guys';
+export type SettingsSubTab = 'company' | 'categories' | 'delivery-areas' | 'pickup-branches' | 'delivery-guys';
 
 export interface GuideChecklistItem {
   id: string;
@@ -36,6 +36,13 @@ export const COMPANY_GUIDE_CHECKLIST: GuideChecklistItem[] = [
     description: 'Add your restaurant name, location, phone, and description in Settings.',
     tab: 'settings',
     settingsSubTab: 'company',
+  },
+  {
+    id: 'categories',
+    title: 'Create menu categories',
+    description: 'Add groups like Main dishes, Sides, and Drinks before adding products.',
+    tab: 'settings',
+    settingsSubTab: 'categories',
   },
   {
     id: 'delivery-areas',
@@ -170,6 +177,16 @@ export const COMPANY_GUIDE_TOUR_STEPS: GuideTourStep[] = [
     body: 'Company profile, delivery zones, pickup branches, and delivery staff are all configured here.',
     checklistId: 'profile',
     placement: 'right',
+  },
+  {
+    id: 'settings-categories',
+    tab: 'settings',
+    settingsSubTab: 'categories',
+    target: '[data-guide="settings-categories"]',
+    title: 'Menu categories',
+    body: 'Create categories here first, then assign them when you add products. Customers can filter by category on the menu.',
+    checklistId: 'categories',
+    placement: 'top',
   },
   {
     id: 'settings-delivery',

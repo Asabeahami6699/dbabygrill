@@ -16,7 +16,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Toaster } from 'react-hot-toast';
 import { supabase } from '../../api/supabase';
 import { api } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
@@ -279,13 +278,6 @@ This action cannot be undone!`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-orange-950 to-slate-900">
-      <Toaster
-        position="top-center"
-        toastOptions={{
-          duration: 4000,
-          className: 'text-sm',
-        }}
-      />
       {/* Header */}
       <header className="border-b border-white/10 bg-black/20 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">

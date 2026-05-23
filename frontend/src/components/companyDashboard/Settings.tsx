@@ -40,7 +40,7 @@ interface DeliveryGuy {
   is_active: boolean;
 }
 
-type SubTab = 'company' | 'delivery-areas' | 'pickup-branches' | 'delivery-guys';
+type SubTab = 'company' | 'categories' | 'delivery-areas' | 'pickup-branches' | 'delivery-guys';
 
 const fetchWithAuth = async (url: string, options: any = {}) => {
   const token = await getValidToken();
@@ -70,6 +70,12 @@ export default function Settings({ company, onUpdate, guideSubTab }: SettingsPro
     email: company?.email || '',
   });
   const [isSaving, setIsSaving] = useState(false);
+
+  // Menu categories state
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [savingCategoryId, setSavingCategoryId] = useState<string | null>(null);
 
   // Delivery areas state
   const [deliveryAreas, setDeliveryAreas] = useState<DeliveryArea[]>([]);
@@ -101,10 +107,64 @@ export default function Settings({ company, onUpdate, guideSubTab }: SettingsPro
 
   // Data fetching
   useEffect(() => {
+    if (activeSubTab === 'categories') fetchCategories();
     if (activeSubTab === 'delivery-areas') fetchDeliveryAreas();
     if (activeSubTab === 'pickup-branches') fetchPickupBranches();
     if (activeSubTab === 'delivery-guys') fetchDeliveryGuys();
   }, [activeSubTab]);
+
+  const fetchCategories = async () => {
+    setLoadingCategories(true);
+    try {
+      const data = await fetchWithAuth('/company/categories');
+      setCategories(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      toast.error('Failed to load categories');
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
+
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      toast.error('Please enter a category name');
+      return;
+    }
+    setLoadingCategories(true);
+    try {
+      const created = await fetchWithAuth('/company/categories', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      });
+      setCategories((prev) => [...prev, created]);
+      setNewCategoryName('');
+      toast.success('Category added');
+      onUpdate();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add category');
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: string, categoryName: string) => {
+    if (!confirm(`Delete category "${categoryName}"? Products using it keep the label until you edit them.`)) {
+      return;
+    }
+    setSavingCategoryId(categoryId);
+    try {
+      await fetchWithAuth(`/company/categories/${categoryId}`, { method: 'DELETE' });
+      setCategories((prev) => prev.filter((c) => c.id !== categoryId));
+      toast.success('Category deleted');
+      onUpdate();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete category');
+    } finally {
+      setSavingCategoryId(null);
+    }
+  };
 
   const fetchDeliveryAreas = async () => {
     setLoadingAreas(true);
@@ -352,6 +412,7 @@ export default function Settings({ company, onUpdate, guideSubTab }: SettingsPro
   // Sub-tabs definition
   const subTabs: { id: SubTab; label: string; icon: string }[] = [
     { id: 'company', label: 'Company Info', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
+    { id: 'categories', label: 'Categories', icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z' },
     { id: 'delivery-areas', label: 'Delivery Areas', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
     { id: 'pickup-branches', label: 'Pickup Branches', icon: 'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z' },
     { id: 'delivery-guys', label: 'Delivery Guys', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
@@ -431,6 +492,64 @@ export default function Settings({ company, onUpdate, guideSubTab }: SettingsPro
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Menu categories */}
+        {activeSubTab === 'categories' && (
+          <div data-guide="settings-categories" className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
+            <h3 className="font-semibold text-base sm:text-lg mb-1">Menu Categories</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Group your products (e.g. Grills, Sides, Drinks). Categories appear when adding products and on the customer menu.
+            </p>
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Add category</h4>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="text"
+                  placeholder="Category name (e.g., Main dishes, Drinks)"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                  className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCategory}
+                  disabled={loadingCategories}
+                  className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-700 disabled:opacity-50 whitespace-nowrap"
+                >
+                  {loadingCategories ? 'Adding…' : 'Add category'}
+                </button>
+              </div>
+            </div>
+            {loadingCategories && categories.length === 0 ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600" />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {categories.map((cat) => (
+                  <div
+                    key={cat.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg gap-3"
+                  >
+                    <span className="font-medium text-gray-800">{cat.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCategory(cat.id, cat.name)}
+                      disabled={savingCategoryId === cat.id}
+                      className="px-3 py-1.5 rounded-lg text-sm bg-red-100 text-red-600 hover:bg-red-200 disabled:opacity-50"
+                    >
+                      {savingCategoryId === cat.id ? '…' : 'Delete'}
+                    </button>
+                  </div>
+                ))}
+                {categories.length === 0 && (
+                  <p className="text-center text-sm text-gray-500 py-8">No categories yet. Add your first one above.</p>
+                )}
+              </div>
+            )}
           </div>
         )}
 

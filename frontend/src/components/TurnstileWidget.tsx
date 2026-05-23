@@ -1,8 +1,14 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 
 const SCRIPT_ID = 'cloudflare-turnstile-script';
 const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
+
+/** Cloudflare dummy keys — localhost only; use real widget keys in production. */
+export function isTurnstileTestSiteKey(key?: string) {
+  const k = (key || SITE_KEY || '').trim();
+  return /^[123]x0{16}/.test(k);
+}
 
 declare global {
   interface Window {
@@ -13,7 +19,7 @@ declare global {
           sitekey: string;
           callback?: (token: string) => void;
           'expired-callback'?: () => void;
-          'error-callback'?: () => void;
+          'error-callback'?: (errorCode?: string) => void;
           theme?: 'light' | 'dark' | 'auto';
           size?: 'normal' | 'compact' | 'flexible';
         }
@@ -52,16 +58,29 @@ interface TurnstileWidgetProps {
   className?: string;
 }
 
+function turnstileErrorHint(errorCode?: string): string {
+  const code = String(errorCode || '');
+  if (code.startsWith('110')) {
+    return 'Turnstile is not configured for this domain. In Cloudflare → Turnstile → your widget → Hostnames, add dbabygrill-frontend.vercel.app (and redeploy with the matching site key).';
+  }
+  if (isTurnstileTestSiteKey() && !/localhost|127\.0\.0\.1/.test(window.location.hostname)) {
+    return 'Production is using a Turnstile test site key. Create a real widget in Cloudflare and set VITE_TURNSTILE_SITE_KEY on Vercel plus TURNSTILE_SECRET_KEY on Render.';
+  }
+  return 'Security check failed. Refresh the page, disable ad blockers, or try another browser.';
+}
+
 export default function TurnstileWidget({ onToken, onExpire, className = '' }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const onTokenRef = useRef(onToken);
   const onExpireRef = useRef(onExpire);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   onTokenRef.current = onToken;
   onExpireRef.current = onExpire;
 
   const reset = useCallback(() => {
+    setLoadError(null);
     onTokenRef.current('');
     if (widgetIdRef.current && window.turnstile) {
       window.turnstile.reset(widgetIdRef.current);
@@ -80,12 +99,26 @@ export default function TurnstileWidget({ onToken, onExpire, className = '' }: T
           sitekey: SITE_KEY.trim(),
           theme: 'light',
           size: 'normal',
-          callback: (token) => onTokenRef.current(token),
-          'expired-callback': () => onExpireRef.current?.(),
-          'error-callback': () => onExpireRef.current?.(),
+          callback: (token) => {
+            setLoadError(null);
+            onTokenRef.current(token);
+          },
+          'expired-callback': () => {
+            setLoadError(null);
+            onExpireRef.current?.();
+          },
+          'error-callback': (errorCode) => {
+            const hint = turnstileErrorHint(errorCode);
+            console.error('[Turnstile] error', errorCode, hint);
+            setLoadError(hint);
+            onExpireRef.current?.();
+          },
         });
       })
-      .catch((err) => console.error('[Turnstile]', err));
+      .catch((err) => {
+        console.error('[Turnstile]', err);
+        setLoadError('Could not load Cloudflare Turnstile. Check your network or ad blocker.');
+      });
 
     return () => {
       cancelled = true;
@@ -124,6 +157,11 @@ export default function TurnstileWidget({ onToken, onExpire, className = '' }: T
           className="w-[300px] max-w-full shrink-0 min-h-[65px]"
         />
       </div>
+      {loadError && (
+        <p className="mt-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2 leading-relaxed">
+          {loadError}
+        </p>
+      )}
     </div>
   );
 }

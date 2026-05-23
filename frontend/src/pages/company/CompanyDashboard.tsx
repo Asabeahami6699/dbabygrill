@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import CompanyGuide from '../../components/companyDashboard/guide/CompanyGuide';
 import type { SettingsSubTab } from '../../components/companyDashboard/guide/companyGuideData';
-import { Toaster } from 'react-hot-toast';
 import { 
   useCompanyData, 
   useRealtimeOrders,
@@ -88,8 +87,6 @@ export default function CompanyDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <Toaster position="top-right" />
-
       {/* Mobile Bottom Navigation */}
       <MobileNavigation
         activeTab={activeTab}
