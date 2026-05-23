@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { useNavigate, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/apiClient';
 import TurnstileWidget, { isTurnstileEnabled } from '../components/TurnstileWidget';
@@ -18,12 +18,20 @@ export default function LoginPage() {
   const { signIn, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const from = location.state?.from || '/';
   const returnTo = location.state?.returnTo || from;
   const stateMessage = location.state?.message as string | undefined;
+  const emailJustVerified = searchParams.get('verified') === '1';
   const checkoutMessage = returnTo === '/checkout' ? stateMessage : undefined;
-  const loginNotice = returnTo !== '/checkout' ? stateMessage : undefined;
+  const loginNotice =
+    returnTo !== '/checkout'
+      ? stateMessage ||
+        (emailJustVerified
+          ? 'Email verified! You can sign in now.'
+          : undefined)
+      : undefined;
 
   useEffect(() => {
     if (!user) return;
@@ -169,17 +177,9 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-gray-700">
-                  Password
-                </label>
-                <Link
-                  to="/forgot-password"
-                  className="text-sm text-orange-600 hover:text-orange-700 font-medium"
-                >
-                  Forgot password?
-                </Link>
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Password
+              </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -212,6 +212,14 @@ export default function LoginPage() {
                     </svg>
                   )}
                 </button>
+              </div>
+              <div className="mt-1.5 text-right">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-orange-600 hover:text-orange-700 font-medium"
+                >
+                  Forgot password?
+                </Link>
               </div>
             </div>
 

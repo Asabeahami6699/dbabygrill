@@ -246,6 +246,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const message = data?.error || err.message || 'Sign in failed';
       const error = new Error(message) as Error & { code?: string };
       error.code = data?.code;
+      if (data?.code === 'EMAIL_NOT_VERIFIED') {
+        clearTokenCache();
+        await supabase.auth.signOut().catch(() => {});
+      }
       throw error;
     }
     const data = response.data;

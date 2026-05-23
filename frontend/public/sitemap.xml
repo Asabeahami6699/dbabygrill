@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://dbabygrill.vercel.app/</loc>
+    <loc>https://dbabygrill-frontend.vercel.app/</loc>
     <lastmod>2026-05-21</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://dbabygrill.vercel.app/login</loc>
+    <loc>https://dbabygrill-frontend.vercel.app/login</loc>
     <lastmod>2026-05-21</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://dbabygrill.vercel.app/register</loc>
+    <loc>https://dbabygrill-frontend.vercel.app/register</loc>
     <lastmod>2026-05-21</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://dbabygrill.vercel.app/cart</loc>
+    <loc>https://dbabygrill-frontend.vercel.app/cart</loc>
     <lastmod>2026-05-21</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>

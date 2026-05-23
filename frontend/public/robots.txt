@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://dbabygrill.vercel.app/sitemap.xml
+Sitemap: https://dbabygrill-frontend.vercel.app/sitemap.xml

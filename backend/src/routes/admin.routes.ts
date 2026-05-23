@@ -298,7 +298,7 @@ router.post(
         type: 'recovery',
         email: email,
         options: {
-          redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/update-password`
+          redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password`
         }
       });
       

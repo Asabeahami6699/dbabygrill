@@ -7,8 +7,18 @@ import { displayNameFromAuthUser } from '../lib/authUserMeta';
 
 const router = Router();
 
-const isEmailVerified = (user: { email_confirmed_at?: string | null; confirmed_at?: string | null }) =>
-  Boolean(user.email_confirmed_at || user.confirmed_at);
+const frontendBaseUrl = () =>
+  (process.env.FRONTEND_URL || process.env.SITE_URL || 'http://localhost:5173').replace(
+    /\/$/,
+    ''
+  );
+
+/** Only email_confirmed_at counts — confirmed_at alone can be set before the user clicks the link. */
+const isEmailVerified = (user: { email_confirmed_at?: string | null }) =>
+  Boolean(user.email_confirmed_at);
+
+const emailConfirmRedirectUrl = () =>
+  `${frontendBaseUrl()}/login?verified=1`;
 
 const clientIp = (req: Request) =>
   (req.headers['cf-connecting-ip'] as string) ||
@@ -48,6 +58,7 @@ router.post('/signup', async (req: Request, res: Response) => {
       email,
       password,
       options: {
+        emailRedirectTo: emailConfirmRedirectUrl(),
         data: {
           full_name: fullName || '',
           phone: phone || '',
@@ -145,6 +156,9 @@ router.post('/resend-verification', async (req: Request, res: Response) => {
     const { error } = await supabaseAuth.auth.resend({
       type: 'signup',
       email: email.trim().toLowerCase(),
+      options: {
+        emailRedirectTo: emailConfirmRedirectUrl(),
+      },
     });
 
     if (error) throw error;
@@ -182,7 +196,17 @@ router.post('/signin', async (req: Request, res: Response) => {
       password,
     });
 
-    if (error) throw error;
+    if (error) {
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
+        return res.status(403).json({
+          error:
+            'Please verify your email before signing in. Check your inbox for the confirmation link.',
+          code: 'EMAIL_NOT_VERIFIED',
+        });
+      }
+      throw error;
+    }
     if (!data.user) throw new Error('No user data returned');
 
     // Customers must verify email (staff roles may use admin-created accounts)
@@ -202,10 +226,10 @@ router.post('/signin', async (req: Request, res: Response) => {
       ? 'delivery_guy'
       : userPrecheck?.role || data.user.user_metadata?.role || 'customer';
 
-    if (
-      role === 'customer' &&
-      !isEmailVerified(data.user)
-    ) {
+    if (role === 'customer' && !isEmailVerified(data.user)) {
+      if (data.session) {
+        await supabase.auth.admin.signOut(data.user.id, 'global');
+      }
       return res.status(403).json({
         error:
           'Please verify your email before signing in. Check your inbox for the confirmation link.',
@@ -692,12 +716,6 @@ router.put('/profile', authenticate, async (req: AuthRequest, res: Response) => 
 // ======================
 // RESET PASSWORD (request email)
 // ======================
-const frontendBaseUrl = () =>
-  (process.env.FRONTEND_URL || process.env.SITE_URL || 'http://localhost:5173').replace(
-    /\/$/,
-    ''
-  );
-
 router.post('/reset-password', async (req: Request, res: Response) => {
   try {
     const email = String(req.body?.email || '')
