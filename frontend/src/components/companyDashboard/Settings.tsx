@@ -8,6 +8,8 @@ import { api } from '../../services/apiClient';
 interface SettingsProps {
   company: Company | null;
   onUpdate: () => void;
+  /** Driven by setup guide / tour */
+  guideSubTab?: SubTab | null;
 }
 
 interface Category {
@@ -51,8 +53,12 @@ const fetchWithAuth = async (url: string, options: any = {}) => {
   return data;
 };
 
-export default function Settings({ company, onUpdate }: SettingsProps) {
+export default function Settings({ company, onUpdate, guideSubTab }: SettingsProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('company');
+
+  useEffect(() => {
+    if (guideSubTab) setActiveSubTab(guideSubTab);
+  }, [guideSubTab]);
 
   // Company info state
   const [isEditing, setIsEditing] = useState(false);
@@ -430,7 +436,7 @@ export default function Settings({ company, onUpdate }: SettingsProps) {
 
         {/* Delivery Areas */}
         {activeSubTab === 'delivery-areas' && (
-          <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
+          <div data-guide="settings-delivery-areas" className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
             <h3 className="font-semibold text-base sm:text-lg mb-4">Delivery Areas</h3>
             <p className="text-sm text-gray-500 mb-4">Set delivery fees for different areas.</p>
             <div className="bg-gray-50 rounded-lg p-4 mb-4">
@@ -503,7 +509,7 @@ export default function Settings({ company, onUpdate }: SettingsProps) {
 
         {/* Pickup Branches */}
         {activeSubTab === 'pickup-branches' && (
-          <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
+          <div data-guide="settings-pickup-branches" className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-1">
               <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -580,7 +586,7 @@ export default function Settings({ company, onUpdate }: SettingsProps) {
 
         {/* Delivery Guys */}
         {activeSubTab === 'delivery-guys' && (
-          <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
+          <div data-guide="settings-delivery-guys" className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-1">
               <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />

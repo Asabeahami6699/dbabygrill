@@ -50,6 +50,7 @@ export default function CompanyHeader({
 
           <div className="flex items-center gap-2 sm:gap-4">
             <button
+              data-guide="add-item"
               onClick={onAddItem}
               className="bg-orange-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-orange-700 flex items-center gap-1 sm:gap-2 text-sm"
             >
@@ -59,7 +60,9 @@ export default function CompanyHeader({
               <span className="hidden sm:inline">Add Item</span>
             </button>
 
-            <NotificationBell onOpenOrder={onOpenOrderFromNotification} />
+            <div data-guide="notifications">
+              <NotificationBell onOpenOrder={onOpenOrderFromNotification} />
+            </div>
 
             {/* Refresh button */}
             <button

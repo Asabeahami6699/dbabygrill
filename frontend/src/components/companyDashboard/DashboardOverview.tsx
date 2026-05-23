@@ -45,7 +45,10 @@ export default function DashboardOverview({ orders, products, onOrderClick }: Da
       <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">Dashboard Overview</h2>
       
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6 mb-6 sm:mb-8">
+      <div
+        data-guide="dashboard-stats"
+        className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6 mb-6 sm:mb-8"
+      >
         <div className="bg-white rounded-xl shadow-sm p-3 sm:p-5 border-l-4 border-orange-500">
           <p className="text-xs sm:text-sm text-gray-500">Today's Orders</p>
           <p className="text-lg sm:text-2xl font-bold">{todayOrders.length}</p>

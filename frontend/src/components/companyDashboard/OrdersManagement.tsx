@@ -223,7 +223,7 @@ export default function OrdersManagement({ orders, onUpdateStatus, onViewDetails
   ];
 
   return (
-    <div>
+    <div data-guide="orders-board">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
         <div className="bg-white rounded-lg p-3 border border-gray-100">

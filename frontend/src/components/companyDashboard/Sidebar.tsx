@@ -27,6 +27,7 @@ export default function Sidebar({ activeTab, onTabChange, onSignOut }: SidebarPr
         {navigationItems.map((item) => (
           <button
             key={item.id}
+            data-guide={`nav-${item.id}`}
             onClick={() => onTabChange(item.id)}
             className={`w-full flex items-center px-5 py-3 transition-colors ${
               activeTab === item.id ? 'bg-orange-600 text-white' : 'text-gray-300 hover:bg-gray-800'

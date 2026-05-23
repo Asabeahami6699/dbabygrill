@@ -2,6 +2,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import CompanyGuide from '../../components/companyDashboard/guide/CompanyGuide';
+import type { SettingsSubTab } from '../../components/companyDashboard/guide/companyGuideData';
 import { Toaster } from 'react-hot-toast';
 import { 
   useCompanyData, 
@@ -29,7 +31,7 @@ const mobileMenuItems = [
 
 export default function CompanyDashboard() {
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const { company, products, orders, loading, refreshData, refreshDataImmediate } = useCompanyData();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showProductModal, setShowProductModal] = useState(false);
@@ -38,6 +40,7 @@ export default function CompanyDashboard() {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [guideSettingsSubTab, setGuideSettingsSubTab] = useState<SettingsSubTab | null>(null);
 
   // Real-time order updates with fallback polling health state.
   const realtimeMode = useRealtimeOrders(company?.id, refreshDataImmediate);
@@ -119,6 +122,7 @@ export default function CompanyDashboard() {
               {mobileMenuItems.map((item) => (
                 <button
                   key={item.id}
+                  data-guide={`nav-${item.id}`}
                   onClick={() => {
                     setActiveTab(item.id);
                     setShowMobileMenu(false);
@@ -192,7 +196,13 @@ export default function CompanyDashboard() {
           )}
           {activeTab === 'customers' && <CustomersList orders={orders} />}
           {activeTab === 'analytics' && <Analytics orders={orders} products={products} />}
-          {activeTab === 'settings' && <Settings company={company} onUpdate={handleRefresh} />}
+          {activeTab === 'settings' && (
+            <Settings
+              company={company}
+              onUpdate={handleRefresh}
+              guideSubTab={guideSettingsSubTab}
+            />
+          )}
         </div>
       </main>
 
@@ -213,6 +223,14 @@ export default function CompanyDashboard() {
         order={showOrderDetails}
         onClose={() => setShowOrderDetails(null)}
         onUpdateStatus={handleRefresh}
+      />
+
+      <CompanyGuide
+        userId={user?.id}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onSettingsSubTabChange={(sub) => setGuideSettingsSubTab(sub as SettingsSubTab)}
+        ready={isInitialized}
       />
 
       <style>{`

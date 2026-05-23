@@ -21,6 +21,7 @@ export default function MobileNavigation({ activeTab, onTabChange, onMoreClick }
         {mobileNavItems.map((item) => (
           <button
             key={item.id}
+            data-guide={`nav-${item.id}`}
             onClick={() => onTabChange(item.id)}
             className={`flex flex-col items-center p-2 rounded-lg transition-colors ${
               activeTab === item.id ? 'text-orange-600' : 'text-gray-600'
@@ -33,6 +34,7 @@ export default function MobileNavigation({ activeTab, onTabChange, onMoreClick }
           </button>
         ))}
         <button
+          data-guide="nav-settings"
           onClick={onMoreClick}
           className="flex flex-col items-center p-2 rounded-lg text-gray-600"
         >
