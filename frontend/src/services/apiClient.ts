@@ -23,10 +23,6 @@ api.interceptors.request.use(
 
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
-      } else {
-        // No session yet — let the request go without auth
-        // The response interceptor will handle 401 if needed
-        console.warn('[api] no token available, sending unauthenticated');
       }
     } catch (error) {
       console.error('[api] token attach error:', error);
@@ -65,16 +61,6 @@ api.interceptors.response.use(
       );
     }
 
-    console.error(
-      '[api] response error:',
-      error?.response?.status,
-      error?.response?.data
-    );
-
-    // ========================================
-    // DO NOT instantly logout on ONE 401
-    // especially after Paystack redirect
-    // ========================================
     if (
       error.response?.status === 401 &&
       !originalRequest?._retry

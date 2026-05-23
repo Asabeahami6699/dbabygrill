@@ -256,7 +256,7 @@ const { data: updatedOrder, error: updateError } = await supabase
         'order',
         '🛵 Order On The Way!',
         `Your order #${order.order_number} has been picked up and is on its way to you!`,
-        { orderId, orderNumber: order.order_number }
+        { orderId, orderNumber: order.order_number, status: 'out_for_delivery' }
       );
     }
 
@@ -331,7 +331,7 @@ router.patch('/orders/:orderId/deliver', async (req: AuthRequest, res: Response)
         'order',
         '🎉 Order Delivered!',
         `Your order #${order.order_number} has been delivered. Enjoy your meal!`,
-        { orderId, orderNumber: order.order_number }
+        { orderId, orderNumber: order.order_number, status: 'delivered' }
       );
 
       // Payment notification
@@ -341,7 +341,7 @@ router.patch('/orders/:orderId/deliver', async (req: AuthRequest, res: Response)
         'payment',
         '💰 Payment Processed',
         `Your payment of ₵${Number(order.total).toFixed(2)} for order #${order.order_number} has been processed.`,
-        { orderId, orderNumber: order.order_number, amount: order.total }
+        { orderId, orderNumber: order.order_number, amount: order.total, status: 'delivered' }
       );
     }
 

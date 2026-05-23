@@ -51,7 +51,6 @@ export function useDriverLocation({ deliveryGuyId, orderId }: UseDriverLocationO
       .maybeSingle()
       .then(({ data, error: fetchError }) => {
         if (fetchError) {
-          console.warn('[useDriverLocation] supabase fetch:', fetchError.message);
           if (orderId) fetchFromApi();
           return;
         }

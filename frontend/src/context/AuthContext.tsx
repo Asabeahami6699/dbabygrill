@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { supabase, getSession, updateSessionCache, clearSessionCache } from '../api/supabase';
 import { clearTokenCache, primeTokenCache, getValidToken } from '../api/authToken';
 import { api } from '../services/apiClient';
+import { useProfileStore } from '../store/profileStore';
 
 interface User {
   id: string;
@@ -74,7 +75,6 @@ async function fetchUserWithRetry(token: string, maxRetries = 3): Promise<any> {
       if (status === 401) throw err;
       if (i < maxRetries) {
         const delay = 2000 * Math.pow(2, i);
-        console.warn(`[auth] /auth/me retry ${i + 1} after ${delay}ms`);
         await new Promise(r => setTimeout(r, delay));
       }
     }
@@ -105,7 +105,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         const userData = await fetchUserWithRetry(token, 3);
-        console.log('[auth] /auth/me resolved role:', userData.role);
 
         setUser({
           id: userData.id,
@@ -179,7 +178,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[auth] state changed:', event);
         updateSessionCache(session ?? null);
 
         if (event === 'TOKEN_REFRESHED') {
@@ -284,6 +282,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Wipe ALL caches before anything else — prevents the old user's token
     // from being sent during the next login flow
     clearTokenCache();   // also calls clearSessionCache() internally
+    useProfileStore.getState().invalidateCache();
     setUser(null);
 
     // Tell backend (fire and forget)

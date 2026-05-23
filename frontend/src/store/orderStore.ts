@@ -74,7 +74,6 @@ export const useOrderStore = create<OrderStore>()(
 
         // Cache for 2 minutes
         if (orders.length > 0 && lastFetched && now - lastFetched < 2 * 60 * 1000) {
-          console.log('Using cached orders');
           return;
         }
 

@@ -5,6 +5,7 @@ import { supabase } from '../../api/supabase';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/apiClient';
+import { inferStatusFromNotification } from '../../lib/orderNavigation';
 
 interface AppNotification {
   id: string;
@@ -99,10 +100,14 @@ export default function NotificationBell({ onOpenOrder }: NotificationBellProps)
     if (orderId) {
       const params = new URLSearchParams();
       params.set('orderId', String(orderId));
+      const status =
+        notification.data?.status || inferStatusFromNotification(notification);
+      if (status && status !== 'all') params.set('status', String(status));
       if (reviewId) params.set('reviewId', String(reviewId));
       if (productId) params.set('productId', String(productId));
-      navigate(`/orders?${params.toString()}`);
       setShowNotifications(false);
+      navigate(`/orders?${params.toString()}`);
+      return;
     }
   };
 

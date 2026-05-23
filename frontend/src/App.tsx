@@ -48,10 +48,7 @@ function CartInitializer() {
   useEffect(() => {
     if (authLoading || initialized) return;
     if (user) {
-      console.log('User authenticated, loading cart from backend...');
       loadCart();
-    } else {
-      console.log('No user, keeping local cart from localStorage');
     }
     setInitialized(true);
   }, [user, authLoading, loadCart, initialized]);

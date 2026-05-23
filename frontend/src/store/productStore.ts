@@ -75,7 +75,6 @@ export const useProductStore = create<ProductStore>()(
         const { lastFetched, products } = get();
         const now = Date.now();
         if (!force && products.length > 0 && lastFetched && now - lastFetched < 5 * 60 * 1000) {
-          console.log('Using cached products');
           return;
         }
         set({ isLoading: true });

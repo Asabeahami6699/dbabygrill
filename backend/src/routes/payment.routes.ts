@@ -161,7 +161,6 @@ router.post('/webhook', async (req: Request, res: Response) => {
     .digest('hex');
 
   if (hash !== signature) {
-    console.warn('[webhook] Invalid HMAC — rejected');
     return res.status(401).send('Invalid signature');
   }
 
@@ -192,10 +191,8 @@ router.post('/webhook', async (req: Request, res: Response) => {
       txnId:        String(data.id),
     });
 
-    console.log('[webhook] ✅ order created for ref:', data.reference);
   } catch (err: any) {
-    // 200 already sent — log for investigation
-    console.error('[webhook] ❌ failed for', data.reference, '—', err.message);
+    console.error('[webhook] failed for', data.reference, err.message);
   }
 });
 
@@ -302,7 +299,6 @@ async function createOrder({
   if (orderErr) {
     // 23505 = unique_violation — duplicate webhook, order already exists
     if (orderErr.code === '23505') {
-      console.log('[createOrder] duplicate blocked by constraint for', reference);
       return;
     }
     throw new Error(`Order insert failed: ${orderErr.message}`);
@@ -366,6 +362,7 @@ async function createOrder({
     {
       orderId:          order.id,
       orderNumber,
+      status:           'confirmed',
       total,
       payment_method:   'card',
       fulfillment_mode: fulfillmentMode,

@@ -16,7 +16,6 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   const handleAddToCart = () => {
     if (!product.company_id) {
-      console.error('Product missing company_id');
       return;
     }
     addItem(

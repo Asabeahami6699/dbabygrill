@@ -116,17 +116,12 @@ router.post(
         return res.status(400).json({ error: 'User ID is required' });
       }
       
-      console.log('Deleting user:', userId);
-      
-      // Delete the user from auth (this will cascade to public.users if properly set up)
       const { error } = await supabase.auth.admin.deleteUser(userId);
       
       if (error) {
         console.error('Error deleting user:', error);
         return res.status(500).json({ error: error.message });
       }
-      
-      console.log('User deleted successfully');
       
       res.json({ message: 'User deleted successfully' });
       
@@ -169,10 +164,6 @@ router.post(
     try {
       const { email, password, full_name, phone, company_id } = req.body;
       
-      console.log('=== Creating company admin ===');
-      console.log('Request body:', { email, full_name, company_id, phone });
-      
-      // Validate required fields
       if (!email || !password || !full_name || !company_id) {
         return res.status(400).json({ 
           error: 'Missing required fields',
@@ -193,9 +184,6 @@ router.post(
         return res.status(400).json({ error: 'Company not found' });
       }
       
-      console.log('Company found:', company.name);
-      
-      // Check if user already exists in auth using listUsers
       const { data: existingUsers, error: listError } = await supabase.auth.admin.listUsers();
       
       if (listError) {
@@ -208,7 +196,6 @@ router.post(
       let userId;
       
       if (existingUser) {
-        console.log('User already exists in auth:', existingUser.id);
         userId = existingUser.id;
         
         // Update user metadata
@@ -252,10 +239,8 @@ router.post(
         }
         
         userId = authData.user.id;
-        console.log('Auth user created:', userId);
       }
       
-      // Now handle public.users - UPSERT (insert or update)
       const userProfile = {
         id: userId,
         email,
@@ -265,9 +250,6 @@ router.post(
         phone: phone || null,
       };
       
-      console.log('Upserting profile:', userProfile);
-      
-      // Use upsert to avoid duplicate key error
       const { error: profileError } = await supabase
         .from('users')
         .upsert(userProfile, { onConflict: 'id' });
@@ -279,8 +261,6 @@ router.post(
           details: profileError.details
         });
       }
-      
-      console.log('✅ Company admin created/updated successfully!');
       
       res.status(201).json({
         message: existingUser ? 'Company admin updated successfully' : 'Company admin created successfully',
@@ -314,9 +294,6 @@ router.post(
         return res.status(400).json({ error: 'Email is required' });
       }
       
-      console.log('Resetting password for:', email);
-      
-      // Use generateLink for password recovery
       const { data, error } = await supabase.auth.admin.generateLink({
         type: 'recovery',
         email: email,
@@ -329,8 +306,6 @@ router.post(
         console.error('Error generating recovery link:', error);
         return res.status(500).json({ error: error.message });
       }
-      
-      console.log('Password reset email sent to:', email);
       
       res.json({ 
         message: 'Password reset email sent successfully',

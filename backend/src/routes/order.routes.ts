@@ -379,6 +379,7 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
         {
           orderId:          order.id,
           orderNumber,
+          status:           'pending',
           total,
           itemCount:        orderItems.length,
           payment_method:   paymentMethodRaw,

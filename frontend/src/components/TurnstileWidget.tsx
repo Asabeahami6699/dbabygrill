@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { RefreshCw } from 'lucide-react';
 
 const SCRIPT_ID = 'cloudflare-turnstile-script';
 const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
@@ -14,6 +15,7 @@ declare global {
           'expired-callback'?: () => void;
           'error-callback'?: () => void;
           theme?: 'light' | 'dark' | 'auto';
+          size?: 'normal' | 'compact' | 'flexible';
         }
       ) => string;
       reset: (widgetId: string) => void;
@@ -50,7 +52,7 @@ interface TurnstileWidgetProps {
   className?: string;
 }
 
-export default function TurnstileWidget({ onToken, onExpire, className }: TurnstileWidgetProps) {
+export default function TurnstileWidget({ onToken, onExpire, className = '' }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const onTokenRef = useRef(onToken);
@@ -60,6 +62,7 @@ export default function TurnstileWidget({ onToken, onExpire, className }: Turnst
   onExpireRef.current = onExpire;
 
   const reset = useCallback(() => {
+    onTokenRef.current('');
     if (widgetIdRef.current && window.turnstile) {
       window.turnstile.reset(widgetIdRef.current);
     }
@@ -76,6 +79,7 @@ export default function TurnstileWidget({ onToken, onExpire, className }: Turnst
         widgetIdRef.current = window.turnstile.render(containerRef.current, {
           sitekey: SITE_KEY.trim(),
           theme: 'light',
+          size: 'normal',
           callback: (token) => onTokenRef.current(token),
           'expired-callback': () => onExpireRef.current?.(),
           'error-callback': () => onExpireRef.current?.(),
@@ -101,16 +105,25 @@ export default function TurnstileWidget({ onToken, onExpire, className }: Turnst
   }
 
   return (
-    <div className={className}>
-      <p className="text-sm font-medium text-gray-700 mb-2">Verify you are human</p>
-      <div ref={containerRef} className="flex justify-center min-h-[65px]" />
-      <button
-        type="button"
-        onClick={reset}
-        className="mt-1 text-xs text-gray-500 hover:text-orange-600"
-      >
-        Refresh security check
-      </button>
+    <div className={`w-full ${className}`}>
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <p className="text-sm font-medium text-gray-700">Verify you are human</p>
+        <button
+          type="button"
+          onClick={reset}
+          aria-label="Refresh security check"
+          title="Refresh security check"
+          className="shrink-0 p-2 rounded-lg text-gray-500 hover:text-orange-600 hover:bg-orange-50 border border-gray-200 transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="flex justify-center overflow-hidden">
+        <div
+          ref={containerRef}
+          className="w-[300px] max-w-full shrink-0 min-h-[65px]"
+        />
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../api/supabase';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -8,11 +8,13 @@ import RatingModal from '../components/RatingModal';
 import { useOrderStore, Order } from '../store/orderStore';
 import { api } from '../services/apiClient';
 import CustomerOrderLiveMap from '../components/deliveryGuyComponents/CustomerOrderLiveMap';
+import { resolveOrderListFilter } from '../lib/orderNavigation';
 import 'leaflet/dist/leaflet.css';
 
 export default function OrdersPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { id: orderIdFromPath } = useParams<{ id?: string }>();
   const { user } = useAuth();
   const { orders, isLoading, fetchOrders } = useOrderStore();
   const [selectedOrder, setSelectedOrder] = useState<string | null>(null);
@@ -77,18 +79,44 @@ export default function OrdersPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const orderId = params.get('orderId');
+    const orderId = params.get('orderId') || orderIdFromPath;
     if (!orderId) return;
+
     setSelectedOrder(orderId);
-    setActiveFilter('delivered');
+    const reviewId = params.get('reviewId');
+    const statusParam = params.get('status');
+    setActiveFilter(
+      resolveOrderListFilter({
+        status: statusParam,
+        reviewId,
+        orderId,
+        orders,
+      })
+    );
+
     setTimeout(() => {
-      const reviewId = params.get('reviewId');
       if (reviewId) {
         const target = document.getElementById(`review-response-${reviewId}`);
         target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
       }
-    }, 200);
-  }, [location.search, orders.length]);
+      const orderEl = document.getElementById(`order-${orderId}`);
+      if (!orderEl && orders.length > 0) {
+        const liveFilter = resolveOrderListFilter({ orderId, orders });
+        if (liveFilter !== 'all') {
+          setActiveFilter(liveFilter);
+          setTimeout(() => {
+            document.getElementById(`order-${orderId}`)?.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center',
+            });
+          }, 150);
+          return;
+        }
+      }
+      orderEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 250);
+  }, [location.search, orderIdFromPath, orders]);
 
   useEffect(() => {
     const runRatingReminders = async () => {
@@ -287,7 +315,7 @@ export default function OrdersPage() {
               const isOutForDelivery = order.status === 'out_for_delivery';
 
               return (
-                <div key={order.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div key={order.id} id={`order-${order.id}`} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   {/* Order Header */}
                   <div className="p-4 border-b border-gray-100">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">

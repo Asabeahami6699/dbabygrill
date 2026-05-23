@@ -39,7 +39,6 @@ export async function geocodeAddress(
     });
 
     if (!res.ok) {
-      console.warn('[geocode] HTTP error:', res.status);
       cache.set(query, null);
       return null;
     }
@@ -47,7 +46,6 @@ export async function geocodeAddress(
     const data = await res.json();
 
     if (!data?.[0]) {
-      console.warn('[geocode] No results for:', query);
       cache.set(query, null);
       return null;
     }

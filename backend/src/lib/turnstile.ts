@@ -33,7 +33,6 @@ export async function verifyTurnstileToken(
       return { ok: true, skipped: false };
     }
 
-    console.warn('[turnstile] verification failed:', data['error-codes']);
     return { ok: false, skipped: false, error: 'Security verification failed. Please try again.' };
   } catch (err) {
     console.error('[turnstile] verify error:', err);

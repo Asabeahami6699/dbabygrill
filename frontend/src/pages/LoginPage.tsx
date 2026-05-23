@@ -23,12 +23,6 @@ export default function LoginPage() {
   const checkoutMessage = location.state?.message;
 
   useEffect(() => {
-    if (checkoutMessage) {
-      console.log('Message from checkout:', checkoutMessage);
-    }
-  }, [checkoutMessage]);
-
-  useEffect(() => {
     if (!user) return;
 
     if (user.role === 'delivery_guy') {
@@ -194,7 +188,6 @@ export default function LoginPage() {
             <TurnstileWidget
               onToken={setTurnstileToken}
               onExpire={() => setTurnstileToken('')}
-              className="flex justify-center"
             />
 
             <button

@@ -393,7 +393,7 @@ router.patch('/:reviewId/respond', authenticate, async (req: AuthRequest, res: R
         'alert',
         'Restaurant replied to your rating',
         'You received feedback on your product rating. Tap to view your orders.',
-        { reviewId, orderId: reviewOrder.id, productId: reviewRow.product_id }
+        { reviewId, orderId: reviewOrder.id, productId: reviewRow.product_id, status: 'delivered' }
       );
     }
 
@@ -562,7 +562,7 @@ router.post('/reminders/run', authenticate, async (req: AuthRequest, res: Respon
           'system',
           'Rate your meal',
           `How was "${item.product_name || 'your meal'}"? Your feedback helps improve quality.`,
-          { orderId: order.id, productId: item.product_id }
+          { orderId: order.id, productId: item.product_id, status: 'delivered' }
         );
         remindersSent += 1;
       }

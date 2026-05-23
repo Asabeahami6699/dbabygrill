@@ -80,9 +80,6 @@ export default function AdminDashboard() {
   setLoading(true);
 
   try {
-    console.log('Step 1: Creating company...');
-
-    // Step 1: Create company
     const { data: companyData, error: companyError } = await supabase
       .from('companies')
       .insert([
@@ -107,9 +104,6 @@ export default function AdminDashboard() {
       throw new Error('Company created but no data returned');
     }
 
-    console.log('✅ Company created:', companyData);
-
-    // Step 2: Get session
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -118,9 +112,7 @@ export default function AdminDashboard() {
       throw new Error('No active session. Please log in again.');
     }
 
-    // Step 3: Create admin
-    console.log('Creating/updating company admin...');
-
+    // Create admin via backend
     const response = await api.post(
       '/admin/create-company-owner',
       {
@@ -138,9 +130,7 @@ export default function AdminDashboard() {
     );
 
     // ✅ Axios already parses JSON
-    const result = response.data;
-
-    console.log('✅ Admin created/updated:', result);
+      const result = response.data;
 
     alert(`✅ Company and Admin created successfully!
 
@@ -216,8 +206,6 @@ This action cannot be undone!`;
   try {
     // Step 1: Delete admin user
     if (company.admin_id) {
-      console.log('Deleting admin user:', company.admin_email);
-
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -233,11 +221,8 @@ This action cannot be undone!`;
           },
         }
       );
-
-      console.log('✅ Admin user deleted successfully');
     }
 
-    // Step 2: Delete company
     const { error: companyError } = await supabase
       .from('companies')
       .delete()
@@ -246,8 +231,6 @@ This action cannot be undone!`;
     if (companyError) {
       throw new Error(`Failed to delete company: ${companyError.message}`);
     }
-
-    console.log('✅ Company deleted successfully');
 
     alert(
       `Company "${company.name}" and its associated admin have been deleted successfully.`

@@ -213,7 +213,7 @@ router.post('/signin', async (req: Request, res: Response) => {
     }
 
     if (!data.session?.refresh_token) {
-      console.error('[signin] WARNING: refresh_token missing from session');
+      // Session still returned; client may refresh via Supabase SDK
     }
 
     // Check delivery_guys first
@@ -531,16 +531,14 @@ router.put('/profile', authenticate, async (req: AuthRequest, res: Response) => 
       .maybeSingle();
 
     if (existingAddress?.id) {
-      const { error: addressError } = await supabase
+      await supabase
         .from('addresses')
         .update(addressPayload)
         .eq('id', existingAddress.id);
-      if (addressError) console.warn('Address update warning:', addressError.message);
     } else if (street || cityVal) {
-      const { error: addressError } = await supabase
+      await supabase
         .from('addresses')
         .insert({ ...addressPayload, created_at: new Date().toISOString() });
-      if (addressError) console.warn('Address insert warning:', addressError.message);
     }
 
     // Keep auth metadata in sync for display fallbacks
@@ -553,7 +551,7 @@ router.put('/profile', authenticate, async (req: AuthRequest, res: Response) => 
         },
       });
     } catch (metaErr) {
-      console.warn('Auth metadata sync warning:', metaErr);
+      console.error('Auth metadata sync error:', metaErr);
     }
 
     res.json({

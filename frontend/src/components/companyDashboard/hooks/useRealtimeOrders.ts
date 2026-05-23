@@ -70,7 +70,6 @@ export function useRealtimeOrders(
     // KEY FIX: Don't call supabase.auth.getSession() here.
     // Supabase realtime manages its own auth token internally via the client.
     // Calling getSession() here is what was triggering extra TOKEN_REFRESHED events.
-    console.log('Realtime subscription status: connecting for company', companyId);
 
     const channel = supabase
       .channel(`orders_realtime_${companyId}`)
@@ -111,9 +110,6 @@ export function useRealtimeOrders(
           startFallbackPolling();
         } else {
           setMode('connecting');
-        }
-        if (status !== 'CLOSED') {
-          console.log('Realtime subscription status:', status);
         }
       });
 

@@ -430,7 +430,6 @@ export default function RegisterPage() {
             <TurnstileWidget
               onToken={setTurnstileToken}
               onExpire={() => setTurnstileToken('')}
-              className="flex justify-center"
             />
 
             {/* Submit Button */}

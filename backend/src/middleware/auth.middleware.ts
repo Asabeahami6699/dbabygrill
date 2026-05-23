@@ -54,9 +54,6 @@ const fetchWithRetry = async <T>(
       if (i === retries - 1 || !isRetryableNetworkError(error)) {
         throw error;
       }
-      console.warn(
-        `[auth] Supabase connection error (${getErrorCode(error) || error?.name}), retry ${i + 1}/${retries} in ${delay}ms`
-      );
       await new Promise((resolve) => setTimeout(resolve, delay));
       delay *= 2;
     }

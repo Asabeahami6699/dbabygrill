@@ -122,7 +122,7 @@ export function useCompanyData() {
 
   const handleError = useCallback(
     (err: any, context: string) => {
-      console.error(`[useCompanyData] Error ${context}:`, err);
+      console.error(`[useCompanyData] ${context}:`, err);
       if (isRateLimitError(err)) {
         setError('Too many requests. Please wait and retry.');
         toast.error('Too many requests. Please wait and retry.');
@@ -144,18 +144,11 @@ export function useCompanyData() {
   );
 
   const loadAllData = useCallback(async () => {
-    if (loadInProgressRef.current) {
-      console.log('[useCompanyData] Load already in progress, skipping');
-      return;
-    }
-    if (!isMountedRef.current) return;
-    if (!user) {
-      console.log('[useCompanyData] No user, skipping load');
+    if (loadInProgressRef.current || !isMountedRef.current || !user) {
       return;
     }
 
     loadInProgressRef.current = true;
-    console.log('[useCompanyData] Starting data load for user:', user.id);
 
     if (isMountedRef.current) {
       setLoading(true);
@@ -163,7 +156,6 @@ export function useCompanyData() {
     }
 
     try {
-      // All three in parallel — one token cache hit covers all three
       const [companyRes, productsRes, ordersRes] = await Promise.allSettled([
         fetchWithAuth('/company/profile'),
         fetchWithAuth('/company/products'),
@@ -172,28 +164,21 @@ export function useCompanyData() {
 
       if (!isMountedRef.current) return;
 
-      // Handle each result independently so one failure doesn't block the others
       if (companyRes.status === 'fulfilled' && companyRes.value) {
-        console.log('[useCompanyData] Company loaded:', companyRes.value?.name);
         setCompany(companyRes.value);
       } else if (companyRes.status === 'rejected') {
-        console.error('[useCompanyData] Company fetch failed:', companyRes.reason);
         handleError(companyRes.reason, 'load company profile');
       }
 
       if (productsRes.status === 'fulfilled') {
-        console.log('[useCompanyData] Products loaded:', productsRes.value?.length ?? 0);
         setProducts(productsRes.value || []);
       } else if (productsRes.status === 'rejected') {
-        console.error('[useCompanyData] Products fetch failed:', productsRes.reason);
         handleError(productsRes.reason, 'load products');
       }
 
       if (ordersRes.status === 'fulfilled') {
-        console.log('[useCompanyData] Orders loaded:', ordersRes.value?.length ?? 0);
         setOrders(ordersRes.value || []);
       } else if (ordersRes.status === 'rejected') {
-        console.error('[useCompanyData] Orders fetch failed:', ordersRes.reason);
         handleError(ordersRes.reason, 'load orders');
       }
     } catch (err: any) {
@@ -201,38 +186,31 @@ export function useCompanyData() {
     } finally {
       if (isMountedRef.current) setLoading(false);
       loadInProgressRef.current = false;
-      console.log('[useCompanyData] Load complete');
     }
   }, [handleError, user]);
 
-  // Fires once when auth settles and user is confirmed
   useEffect(() => {
     isMountedRef.current = true;
 
     if (authLoading) {
-      console.log('[useCompanyData] Waiting for auth...');
       return;
     }
 
     if (!user) {
-      console.log('[useCompanyData] No user after auth settled, redirecting');
       if (isMountedRef.current) setLoading(false);
       navigate('/login');
       return;
     }
 
-    console.log('[useCompanyData] Auth settled, user ready:', user.id);
     loadAllData();
 
     return () => {
       isMountedRef.current = false;
     };
   }, [user?.id, authLoading]);
-  // Stable triggers only: user?.id is stable string, authLoading is boolean
-  // loadAllData/handleError/navigate used but not deps to avoid circular updates
 
   const refreshData = useCallback(async () => {
-    loadInProgressRef.current = false; // reset guard so manual refresh always goes through
+    loadInProgressRef.current = false;
     await loadAllData();
   }, [loadAllData]);
 

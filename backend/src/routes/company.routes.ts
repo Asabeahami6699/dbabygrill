@@ -708,7 +708,8 @@ router.patch(
             {
               orderId,
               orderNumber: existingOrder.order_number,
-              amount: existingOrder.total
+              amount: existingOrder.total,
+              status: 'delivered',
             }
           );
         }
