@@ -17,27 +17,51 @@ export interface AuthRequest extends Request {
   files?: Express.Multer.File[];
 }
 
-// Add retry logic for Supabase connection
+const getErrorCode = (error: any): string | undefined =>
+  error?.code ?? error?.cause?.code;
+
+/** Network / Supabase reachability failures (not invalid credentials). */
+const isRetryableNetworkError = (error: any): boolean => {
+  if (!error) return false;
+  const code = getErrorCode(error);
+  return (
+    code === 'UND_ERR_CONNECT_TIMEOUT' ||
+    code === 'ENOTFOUND' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ECONNRESET' ||
+    code === 'ECONNREFUSED' ||
+    error?.status === 0 ||
+    error?.name === 'AuthRetryableFetchError' ||
+    String(error?.message || '').toLowerCase().includes('fetch failed')
+  );
+};
+
+const isAuthResultNetworkFailure = (authError: any): boolean =>
+  isRetryableNetworkError(authError) || authError?.status === 0;
+
+// Retry Supabase calls on transient network timeouts
 const fetchWithRetry = async <T>(
   fn: () => Promise<T>,
-  retries = 3,
-  delay = 1000
+  retries = 4,
+  delay = 1500
 ): Promise<T> => {
+  let lastError: any;
   for (let i = 0; i < retries; i++) {
     try {
       return await fn();
     } catch (error: any) {
-      if (i === retries - 1) throw error;
-      if (error.code === 'UND_ERR_CONNECT_TIMEOUT' || error.code === 'ENOTFOUND') {
-        console.log(`Connection error, retrying in ${delay}ms... (${i + 1}/${retries})`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
-      } else {
+      lastError = error;
+      if (i === retries - 1 || !isRetryableNetworkError(error)) {
         throw error;
       }
+      console.warn(
+        `[auth] Supabase connection error (${getErrorCode(error) || error?.name}), retry ${i + 1}/${retries} in ${delay}ms`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay *= 2;
     }
   }
-  throw new Error('Request failed after retries');
+  throw lastError ?? new Error('Request failed after retries');
 };
 
 export const authenticate = async (
@@ -60,14 +84,33 @@ export const authenticate = async (
     // ======================
     // 2. VERIFY USER WITH RETRY
     // ======================
-    const { data: { user }, error: authError } = await fetchWithRetry(async () => {
-      const result = await supabase.auth.getUser(token);
-      return result;
-    });
+    let userResult: Awaited<ReturnType<typeof supabase.auth.getUser>>;
+    try {
+      userResult = await fetchWithRetry(() => supabase.auth.getUser(token));
+    } catch (error: any) {
+      console.error('Auth getUser failed:', error);
+      if (isRetryableNetworkError(error)) {
+        return res.status(503).json({
+          error:
+            'Cannot reach authentication service. Check your internet connection and try again.',
+          code: 'AUTH_SERVICE_UNAVAILABLE',
+        });
+      }
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    const { data: { user }, error: authError } = userResult;
 
     if (authError || !user) {
       console.error('Auth error:', authError);
-      return res.status(401).json({ error: 'Invalid token' });
+      if (isAuthResultNetworkFailure(authError)) {
+        return res.status(503).json({
+          error:
+            'Cannot reach authentication service. Check your internet connection and try again.',
+          code: 'AUTH_SERVICE_UNAVAILABLE',
+        });
+      }
+      return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
     // ======================
@@ -183,8 +226,15 @@ export const authenticate = async (
     };
 
     next();
-  } catch (error) {
+  } catch (error: any) {
     console.error('Auth error:', error);
+    if (isRetryableNetworkError(error)) {
+      return res.status(503).json({
+        error:
+          'Cannot reach authentication service. Check your internet connection and try again.',
+        code: 'AUTH_SERVICE_UNAVAILABLE',
+      });
+    }
     res.status(500).json({ error: 'Authentication failed' });
   }
 };

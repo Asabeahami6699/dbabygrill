@@ -8,6 +8,8 @@ import { useEffect, useState } from 'react';
 import { useCartStore } from './store/cartStore';
 import { useAuth } from './context/AuthContext';
 import { useBrowserNotifications } from './hooks/useBrowserNotifications';
+import { useNetworkStatus } from './hooks/useNetworkStatus';
+import { Toaster } from 'react-hot-toast';
 import { supabase } from './api/supabase';
 import { useProductStore } from './store/productStore';
 import { useOrderStore } from './store/orderStore';
@@ -29,6 +31,11 @@ import DeliveryDashboard from './pages/deliveryGuy/Deliverydashboard';
 // ── Browser push permission (free Web Notifications API) ─────────────────────
 function BrowserNotificationBootstrap() {
   useBrowserNotifications();
+  return null;
+}
+
+function NetworkStatusBootstrap() {
+  useNetworkStatus();
   return null;
 }
 
@@ -96,6 +103,8 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
+        <NetworkStatusBootstrap />
         <BrowserNotificationBootstrap />
         <CartInitializer />
         <GlobalRealtimeChannels />

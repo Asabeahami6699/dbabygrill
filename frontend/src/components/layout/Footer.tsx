@@ -124,7 +124,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
           {/* Brand Section */}
           <div className="space-y-4">
-            <h3 className="text-2xl font-bold text-orange-500">Grill Market</h3>
+            <h3 className="text-2xl font-bold text-orange-500">DBaby Grills</h3>
             <p className="text-gray-400 text-sm leading-relaxed">
               Discover the best grill restaurants in your area. Order delicious food from your favorite local spots.
             </p>
@@ -186,7 +186,7 @@ export default function Footer() {
             <Link to="/shipping" className="text-gray-400 hover:text-orange-500 transition-colors text-sm">Shipping Info</Link>
           </div>
           <div className="text-center text-gray-500 text-sm">
-            <p>© {currentYear} Grill Market. All rights reserved.</p>
+            <p>© {currentYear} DBaby Grills. All rights reserved.</p>
             <p className="mt-1 text-xs">Made with ❤️ for grill lovers in Ghana</p>
           </div>
         </div>

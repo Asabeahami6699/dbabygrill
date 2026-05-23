@@ -357,7 +357,7 @@ export default function Navbar() {
               </div>
 
               <Link to="/" className="text-xl sm:text-2xl font-bold text-orange-600 shrink-0">
-                D-BABY GRILLS
+                DBaby Grills
               </Link>
             </div>
 

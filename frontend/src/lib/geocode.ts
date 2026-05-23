@@ -70,6 +70,7 @@ export interface ReverseGeocodeResult {
   displayName: string;
   city: string;
   region: string;
+  streetAddress: string;
 }
 
 /** Resolve GPS coordinates to a readable address (Ghana-focused). */
@@ -83,7 +84,7 @@ export async function reverseGeocode(
   try {
     const url =
       `https://nominatim.openstreetmap.org/reverse` +
-      `?format=json&lat=${lat}&lon=${lng}&addressdetails=1`;
+      `?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
 
     const res = await fetch(url, {
       headers: {
@@ -103,24 +104,36 @@ export async function reverseGeocode(
     const city =
       addr.suburb ||
       addr.neighbourhood ||
+      addr.quarter ||
       addr.city_district ||
       addr.town ||
       addr.city ||
       addr.village ||
+      addr.county ||
       '';
     const region = addr.state || addr.region || 'Ghana';
-    const road = addr.road || addr.pedestrian || '';
+    const road =
+      addr.road ||
+      addr.pedestrian ||
+      addr.footway ||
+      addr.residential ||
+      '';
     const house = addr.house_number || '';
-    const streetPart = [house, road].filter(Boolean).join(' ');
+    const streetPart = [house, road].filter(Boolean).join(' ').trim();
+    const locality = [addr.suburb, addr.neighbourhood, addr.quarter]
+      .filter(Boolean)
+      .join(', ');
+    const streetAddress = streetPart || locality || '';
     const displayName =
+      [streetPart, locality, city, region].filter(Boolean).join(', ') ||
       data?.display_name ||
-      [streetPart, city, region].filter(Boolean).join(', ') ||
       `Location near ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
     const result: ReverseGeocodeResult = {
       displayName,
       city: String(city),
       region: String(region),
+      streetAddress: String(streetAddress),
     };
     reverseCache.set(key, result);
     return result;

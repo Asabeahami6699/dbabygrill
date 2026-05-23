@@ -17,7 +17,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   isAuthReady: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, turnstileToken?: string) => Promise<void>;
   signUp: (email: string, password: string, userData?: SignUpData) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -237,8 +237,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [refreshUser]);
 
-  const signIn = async (email: string, password: string) => {
-    const response = await api.post('/auth/signin', { email, password });
+  const signIn = async (email: string, password: string, turnstileToken?: string) => {
+    let response;
+    try {
+      response = await api.post('/auth/signin', { email, password, turnstileToken });
+    } catch (err: any) {
+      const data = err?.response?.data;
+      const message = data?.error || err.message || 'Sign in failed';
+      const error = new Error(message) as Error & { code?: string };
+      error.code = data?.code;
+      throw error;
+    }
     const data = response.data;
 
     if (data.session?.access_token) {

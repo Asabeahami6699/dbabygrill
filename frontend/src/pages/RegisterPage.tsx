@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '../api/supabase';
+import { api } from '../services/apiClient';
+import TurnstileWidget, { isTurnstileEnabled } from '../components/TurnstileWidget';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -24,6 +25,7 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -92,82 +94,43 @@ export default function RegisterPage() {
       return;
     }
     
+    if (isTurnstileEnabled() && !turnstileToken) {
+      setErrors({ submit: 'Please complete the security check below.' });
+      return;
+    }
+
     setLoading(true);
     setSuccessMessage('');
-    
+
     try {
-      // Sign up with Supabase Auth
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+      const { data } = await api.post('/auth/signup', {
         email: formData.email,
         password: formData.password,
-        options: {
-          data: {
-            full_name: formData.full_name,
-            phone: formData.phone,
-            role: 'customer'
-          }
-        }
+        fullName: formData.full_name,
+        phone: formData.phone,
+        role: 'customer',
+        turnstileToken: turnstileToken || undefined,
+        digital_address: formData.digital_address,
+        street_address: formData.street_address,
+        region: formData.region,
+        city: formData.city,
+        landmark: formData.landmark || null,
       });
 
-      if (signUpError) throw signUpError;
-
-      if (authData.user) {
-        console.log('User created:', authData.user.id);
-        
-        // Wait for the trigger to create the user profile
-        let retries = 0;
-        let userCreated = false;
-        
-        while (retries < 5 && !userCreated) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          const { data: userData } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', authData.user.id)
-            .maybeSingle();
-          
-          if (userData) {
-            userCreated = true;
-            console.log('User profile found:', userData);
-          }
-          retries++;
-        }
-        
-        // Create address in addresses table
-        const { error: addressError } = await supabase
-          .from('addresses')
-          .insert({
-            user_id: authData.user.id,
-            address_type: 'shipping',
-            is_default: true,
-            digital_address: formData.digital_address,
-            street_address: formData.street_address,
-            region: formData.region,
-            city: formData.city,
-            landmark: formData.landmark || null,
-            phone: formData.phone,
-            recipient_name: formData.full_name
-          });
-        
-        if (addressError) {
-          console.error('Address creation error:', addressError);
-          // Don't fail registration if address creation fails
-        } else {
-          console.log('Address created successfully');
-        }
-      }
-      
-      setSuccessMessage('Registration successful! Please check your email to verify your account.');
+      setSuccessMessage(
+        data.message ||
+          'Registration successful! Please check your email to verify your account.'
+      );
       setTimeout(() => {
         navigate('/login');
       }, 3000);
     } catch (err: any) {
       console.error('Registration error:', err);
-      if (err.message?.includes('already registered')) {
+      const msg = err?.response?.data?.error || err.message || '';
+      if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already exists')) {
         setErrors({ email: 'This email is already registered. Please login instead.' });
       } else {
-        setErrors({ submit: err.message || 'Registration failed. Please try again.' });
+        setErrors({ submit: msg || 'Registration failed. Please try again.' });
       }
     } finally {
       setLoading(false);
@@ -219,7 +182,7 @@ export default function RegisterPage() {
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-8">
           <Link to="/" className="inline-block">
-            <h1 className="text-3xl font-bold text-orange-600">Grill Market</h1>
+            <h1 className="text-3xl font-bold text-orange-600">DBaby Grills</h1>
           </Link>
           <h2 className="mt-4 text-2xl font-bold text-gray-900">Create an account</h2>
           <p className="mt-2 text-gray-600">Join us for a delicious experience</p>
@@ -463,6 +426,12 @@ export default function RegisterPage() {
                 {errors.acceptTerms && <p className="text-xs text-red-600 mt-1">{errors.acceptTerms}</p>}
               </div>
             </div>
+
+            <TurnstileWidget
+              onToken={setTurnstileToken}
+              onExpire={() => setTurnstileToken('')}
+              className="flex justify-center"
+            />
 
             {/* Submit Button */}
             <button

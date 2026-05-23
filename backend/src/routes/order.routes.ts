@@ -24,14 +24,18 @@ const getDeliveryFeeForArea = async (companyId: string, cityOrArea: string) => {
   const activeAreas = areas || [];
 
   if (!normalizedInput || activeAreas.length === 0) {
-    return { fee: fallbackFee, matchedArea: null };
+    return { fee: fallbackFee, matchedArea: null, negotiated: false };
   }
 
   const exactMatch = activeAreas.find(
     (area: any) => normalizeLocation(area.area_name) === normalizedInput
   );
   if (exactMatch) {
-    return { fee: Number(exactMatch.delivery_fee || 0), matchedArea: exactMatch.area_name };
+    return {
+      fee: Number(exactMatch.delivery_fee || 0),
+      matchedArea: exactMatch.area_name,
+      negotiated: false,
+    };
   }
 
   const partialMatch = activeAreas.find((area: any) => {
@@ -40,10 +44,15 @@ const getDeliveryFeeForArea = async (companyId: string, cityOrArea: string) => {
   });
 
   if (partialMatch) {
-    return { fee: Number(partialMatch.delivery_fee || 0), matchedArea: partialMatch.area_name };
+    return {
+      fee: Number(partialMatch.delivery_fee || 0),
+      matchedArea: partialMatch.area_name,
+      negotiated: false,
+    };
   }
 
-  return { fee: fallbackFee, matchedArea: null };
+  // Outside configured delivery areas — fee confirmed with customer later
+  return { fee: 0, matchedArea: null, negotiated: true };
 };
 
 // ============================
@@ -60,7 +69,8 @@ router.get('/delivery-fee', authenticate, async (req: AuthRequest, res) => {
     return res.json({
       deliveryFee: quote.fee,
       matchedArea: quote.matchedArea,
-      fallbackApplied: !quote.matchedArea,
+      fallbackApplied: !quote.matchedArea && !quote.negotiated,
+      negotiated: quote.negotiated,
     });
   } catch (error) {
     console.error('Delivery fee quote error:', error);
@@ -234,9 +244,11 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
     // ============================
     // Pickup orders have no delivery fee
     let finalDeliveryFee = 0;
+    let deliveryFeeNegotiated = false;
     if (!isPickup) {
-      const deliveryQuote  = await getDeliveryFeeForArea(companyId, formData.city);
-      finalDeliveryFee     = deliveryQuote.fee;
+      const deliveryQuote = await getDeliveryFeeForArea(companyId, formData.city);
+      finalDeliveryFee = deliveryQuote.fee;
+      deliveryFeeNegotiated = deliveryQuote.negotiated;
     }
     const total = subtotal + finalDeliveryFee;
 
@@ -286,7 +298,14 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
         delivery_address:        deliveryAddress,
         delivery_latitude:       deliveryLatitude,
         delivery_longitude:      deliveryLongitude,
-        special_instructions:    formData.notes?.trim() || null,
+        special_instructions:    [
+          formData.notes?.trim() || '',
+          deliveryFeeNegotiated
+            ? '[Delivery fee to be negotiated — address outside standard delivery areas]'
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n') || null,
         payment_method:          paymentMethodRaw,         // ✅ dynamic — cash / mobile_money / card
         status:                  'pending',
         estimated_delivery_time: new Date(Date.now() + 45 * 60_000).toISOString(),

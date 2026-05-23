@@ -62,12 +62,14 @@ export interface CheckoutStore {
   deliveryDetailsMode: 'saved' | 'custom';
   customLocationSelected: boolean;
   gpsLoading: boolean;
+  gpsAccuracy: number | null;
 
   // ── Delivery data ──
   deliveryAreas: DeliveryArea[];
   deliveryAreasLoading: boolean;
   dynamicDeliveryFee: number;
   matchedDeliveryArea: string | null;
+  deliveryFeeNegotiated: boolean;
   deliveryFeeLoading: boolean;
 
   // ── Saved address ──
@@ -95,6 +97,7 @@ export interface CheckoutStore {
   setCustomLocationSelected: (val: boolean) => void;
   setLocationInputMode: (mode: 'manual' | 'gps') => void;
   captureCurrentLocation: (companyId: string) => Promise<void>;
+  updateGpsPin: (lat: number, lng: number, companyId?: string) => Promise<void>;
   clearGpsLocation: () => void;
   setItemInstructions: (instructions: ItemInstruction[]) => void;
   updateInstruction: (productId: string, instruction: string) => void;
@@ -157,11 +160,13 @@ export const useCheckoutStore = create<CheckoutStore>()(
       deliveryDetailsMode: 'custom',
       customLocationSelected: false,
       gpsLoading: false,
+      gpsAccuracy: null,
 
       deliveryAreas: [],
       deliveryAreasLoading: false,
       dynamicDeliveryFee: 0,
       matchedDeliveryArea: null,
+      deliveryFeeNegotiated: false,
       deliveryFeeLoading: false,
 
       savedAddress: null,
@@ -177,9 +182,10 @@ export const useCheckoutStore = create<CheckoutStore>()(
       lastOrderNumber: null,
 
       // ── Computed: delivery fee is 0 for pickup ──
-      effectiveDeliveryFee: (subtotal: number) => {
-        const { fulfillmentMode, dynamicDeliveryFee } = get();
+      effectiveDeliveryFee: (_subtotal: number) => {
+        const { fulfillmentMode, dynamicDeliveryFee, deliveryFeeNegotiated } = get();
         if (fulfillmentMode === 'pickup') return 0;
+        if (deliveryFeeNegotiated) return 0;
         return dynamicDeliveryFee;
       },
 
@@ -210,44 +216,40 @@ export const useCheckoutStore = create<CheckoutStore>()(
 
       clearGpsLocation: () =>
         set((state) => ({
+          gpsAccuracy: null,
           formData: {
             ...state.formData,
             deliveryLatitude: null,
             deliveryLongitude: null,
             locationLabel: '',
+            address: '',
           },
         })),
 
       captureCurrentLocation: async (companyId: string) => {
         set({ gpsLoading: true });
         try {
-          if (!('geolocation' in navigator)) {
-            throw new Error('GPS is not supported on this device.');
+          const { getAccuratePosition, isInGhana } = await import('../lib/geolocation');
+          const { reverseGeocode } = await import('../lib/geocode');
+
+          const pos = await getAccuratePosition();
+          const lat = pos.latitude;
+          const lng = pos.longitude;
+
+          if (!isInGhana(lat, lng)) {
+            throw new Error(
+              'GPS shows a location outside Ghana. Turn off VPN, try again, or use street + landmark.'
+            );
           }
 
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 20_000,
-              maximumAge: 0,
-            });
-          }).catch((err: GeolocationPositionError) => {
-            if (err.code === err.PERMISSION_DENIED) {
-              throw new Error('Location permission denied. Allow GPS in browser settings.');
-            }
-            throw new Error('Could not get GPS fix. Try again outdoors or use street address.');
-          });
-
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-          const { reverseGeocode } = await import('../lib/geocode');
           const reversed = await reverseGeocode(lat, lng);
-
           const city = reversed?.city || get().formData.city;
           const region = reversed?.region || 'Ghana';
           const label = reversed?.displayName || `GPS (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+          const street = reversed?.streetAddress || '';
 
           set((state) => ({
+            gpsAccuracy: pos.accuracy,
             formData: {
               ...state.formData,
               locationInputMode: 'gps',
@@ -256,7 +258,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
               locationLabel: label,
               city: city || state.formData.city,
               region,
-              address: '',
+              address: street,
             },
           }));
 
@@ -265,6 +267,34 @@ export const useCheckoutStore = create<CheckoutStore>()(
           }
         } finally {
           set({ gpsLoading: false });
+        }
+      },
+
+      updateGpsPin: async (lat: number, lng: number, companyId?: string) => {
+        const { reverseGeocode } = await import('../lib/geocode');
+        const reversed = await reverseGeocode(lat, lng);
+        const city = reversed?.city || get().formData.city;
+        const region = reversed?.region || get().formData.region;
+        const label =
+          reversed?.displayName ||
+          get().formData.locationLabel ||
+          `GPS (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+
+        set((state) => ({
+          gpsAccuracy: null,
+          formData: {
+            ...state.formData,
+            deliveryLatitude: lat,
+            deliveryLongitude: lng,
+            locationLabel: label,
+            city: city || state.formData.city,
+            region,
+            address: reversed?.streetAddress || state.formData.address,
+          },
+        }));
+
+        if (companyId && city) {
+          await get().fetchDeliveryFee(companyId, city);
         }
       },
 
@@ -377,7 +407,11 @@ export const useCheckoutStore = create<CheckoutStore>()(
       // ── Fetch delivery fee for selected city ──
       fetchDeliveryFee: async (companyId: string, city: string) => {
         if (!city.trim()) {
-          set({ dynamicDeliveryFee: 0, matchedDeliveryArea: null });
+          set({
+            dynamicDeliveryFee: 0,
+            matchedDeliveryArea: null,
+            deliveryFeeNegotiated: false,
+          });
           return;
         }
         set({ deliveryFeeLoading: true });
@@ -385,13 +419,20 @@ export const useCheckoutStore = create<CheckoutStore>()(
           const quote = await authFetch(
             `/orders/delivery-fee?companyId=${encodeURIComponent(companyId)}&city=${encodeURIComponent(city)}`
           );
+          const negotiated = Boolean(quote.negotiated);
           set({
-            dynamicDeliveryFee: Number(quote.deliveryFee || 0),
+            dynamicDeliveryFee: negotiated ? 0 : Number(quote.deliveryFee || 0),
             matchedDeliveryArea: quote.matchedArea || null,
+            deliveryFeeNegotiated: negotiated,
+            customLocationSelected: negotiated ? true : get().customLocationSelected,
           });
         } catch (err) {
           console.error('Delivery fee fetch error:', err);
-          set({ dynamicDeliveryFee: 0, matchedDeliveryArea: null });
+          set({
+            dynamicDeliveryFee: 0,
+            matchedDeliveryArea: null,
+            deliveryFeeNegotiated: false,
+          });
         } finally {
           set({ deliveryFeeLoading: false });
         }
@@ -500,8 +541,10 @@ export const useCheckoutStore = create<CheckoutStore>()(
           deliveryDetailsMode: 'custom',
           customLocationSelected: false,
           gpsLoading: false,
+          gpsAccuracy: null,
           dynamicDeliveryFee: 0,
           matchedDeliveryArea: null,
+          deliveryFeeNegotiated: false,
           deliveryAreas: [],
           deliveryAreasLoading: false,
           pickupBranches: [],

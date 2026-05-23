@@ -2,18 +2,45 @@
 import { Router, Request, Response } from 'express';
 import { supabase, supabaseAuth } from '../config/supabase';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
+import { verifyTurnstileToken } from '../lib/turnstile';
 
 const router = Router();
+
+const isEmailVerified = (user: { email_confirmed_at?: string | null; confirmed_at?: string | null }) =>
+  Boolean(user.email_confirmed_at || user.confirmed_at);
+
+const clientIp = (req: Request) =>
+  (req.headers['cf-connecting-ip'] as string) ||
+  (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+  req.socket.remoteAddress;
 
 // ======================
 // SIGN UP
 // ======================
 router.post('/signup', async (req: Request, res: Response) => {
   try {
-    const { email, password, fullName, phone, role, companyName } = req.body;
+    const {
+      email,
+      password,
+      fullName,
+      phone,
+      role,
+      companyName,
+      turnstileToken,
+      digital_address,
+      street_address,
+      region,
+      city,
+      landmark,
+    } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const captcha = await verifyTurnstileToken(turnstileToken, clientIp(req));
+    if (!captcha.ok) {
+      return res.status(400).json({ error: captcha.error || 'Security verification failed' });
     }
 
     const { data: authData, error: authError } = await supabaseAuth.auth.signUp({
@@ -72,9 +99,26 @@ router.post('/signup', async (req: Request, res: Response) => {
       }
     }
 
+    if ((role || 'customer') === 'customer' && street_address) {
+      const { error: addressError } = await supabase.from('addresses').insert({
+        user_id: authData.user.id,
+        address_type: 'shipping',
+        is_default: true,
+        digital_address: digital_address || null,
+        street_address,
+        region: region || null,
+        city: city || null,
+        landmark: landmark || null,
+        phone: phone || null,
+        recipient_name: fullName || null,
+      });
+      if (addressError) console.error('Signup address error:', addressError);
+    }
+
     res.status(201).json({
       success: true,
-      message: 'User created successfully',
+      message:
+        'Account created. Please check your email and click the verification link before signing in.',
       user: {
         id: authData.user.id,
         email: authData.user.email,
@@ -88,14 +132,48 @@ router.post('/signup', async (req: Request, res: Response) => {
 });
 
 // ======================
+// RESEND EMAIL VERIFICATION
+// ======================
+router.post('/resend-verification', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email?.trim()) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const { error } = await supabaseAuth.auth.resend({
+      type: 'signup',
+      email: email.trim().toLowerCase(),
+    });
+
+    if (error) throw error;
+
+    return res.json({
+      success: true,
+      message: 'Verification email sent. Check your inbox and spam folder.',
+    });
+  } catch (error: any) {
+    console.error('Resend verification error:', error);
+    return res.status(500).json({
+      error: error.message || 'Could not send verification email',
+    });
+  }
+});
+
+// ======================
 // SIGN IN
 // ======================
 router.post('/signin', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, turnstileToken } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const captcha = await verifyTurnstileToken(turnstileToken, clientIp(req));
+    if (!captcha.ok) {
+      return res.status(400).json({ error: captcha.error || 'Security verification failed' });
     }
 
     const { data, error } = await supabaseAuth.auth.signInWithPassword({
@@ -105,6 +183,34 @@ router.post('/signin', async (req: Request, res: Response) => {
 
     if (error) throw error;
     if (!data.user) throw new Error('No user data returned');
+
+    // Customers must verify email (staff roles may use admin-created accounts)
+    const { data: deliveryGuyPrecheck } = await supabase
+      .from('delivery_guys')
+      .select('id')
+      .eq('user_id', data.user.id)
+      .maybeSingle();
+
+    const { data: userPrecheck } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', data.user.id)
+      .maybeSingle();
+
+    const role = deliveryGuyPrecheck
+      ? 'delivery_guy'
+      : userPrecheck?.role || data.user.user_metadata?.role || 'customer';
+
+    if (
+      role === 'customer' &&
+      !isEmailVerified(data.user)
+    ) {
+      return res.status(403).json({
+        error:
+          'Please verify your email before signing in. Check your inbox for the confirmation link.',
+        code: 'EMAIL_NOT_VERIFIED',
+      });
+    }
 
     if (!data.session?.refresh_token) {
       console.error('[signin] WARNING: refresh_token missing from session');

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-
+import { api } from '../services/apiClient';
+import TurnstileWidget, { isTurnstileEnabled } from '../components/TurnstileWidget';
+import toast from 'react-hot-toast';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -9,10 +11,13 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [emailNotVerified, setEmailNotVerified] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
   const { signIn, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const from = location.state?.from || '/';
   const returnTo = location.state?.returnTo || from;
   const checkoutMessage = location.state?.message;
@@ -23,8 +28,6 @@ export default function LoginPage() {
     }
   }, [checkoutMessage]);
 
-  // Role-based redirects take priority over returnTo.
-  // Delivery guys, company admins, and admins must never land on a customer page.
   useEffect(() => {
     if (!user) return;
 
@@ -41,22 +44,53 @@ export default function LoginPage() {
     }
   }, [user, navigate, returnTo]);
 
+  const handleResendVerification = async () => {
+    if (!email.trim()) {
+      setError('Enter your email address first.');
+      return;
+    }
+    setResendLoading(true);
+    try {
+      const { data } = await api.post('/auth/resend-verification', { email: email.trim() });
+      toast.success(data.message || 'Verification email sent.');
+      setError('');
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || 'Could not send verification email.';
+      setError(msg);
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setEmailNotVerified(false);
+
+    if (isTurnstileEnabled() && !turnstileToken) {
+      setError('Please complete the security check below.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await signIn(email, password);
-      // Redirect happens in useEffect above
+      await signIn(email, password, turnstileToken || undefined);
     } catch (err: any) {
-      const errorMsg = err.message?.toLowerCase() || '';
-      if (errorMsg.includes('user') || errorMsg.includes('email') || errorMsg.includes('not found')) {
+      const code = err?.code;
+      const errorMsg = (err.message || '').toLowerCase();
+
+      if (code === 'EMAIL_NOT_VERIFIED' || errorMsg.includes('verify your email')) {
+        setEmailNotVerified(true);
+        setError('Please verify your email before signing in. Check your inbox for the confirmation link.');
+      } else if (errorMsg.includes('user') || errorMsg.includes('email') || errorMsg.includes('not found')) {
         setError('No account found with this email address');
-      } else if (errorMsg.includes('password')) {
-        setError('Password is incorrect');
-      } else {
+      } else if (errorMsg.includes('password') || errorMsg.includes('invalid')) {
         setError('Invalid email or password');
+      } else if (errorMsg.includes('security')) {
+        setError(err.message);
+      } else {
+        setError(err.message || 'Invalid email or password');
       }
       setLoading(false);
     }
@@ -67,11 +101,11 @@ export default function LoginPage() {
       <div className="max-w-md mx-auto">
         <div className="text-center mb-8">
           <Link to="/" className="inline-block">
-            <h1 className="text-3xl font-bold text-orange-600">Grill Market</h1>
+            <h1 className="text-3xl font-bold text-orange-600">DBaby Grills</h1>
           </Link>
           <h2 className="mt-4 text-2xl font-bold text-gray-900">Welcome Back</h2>
           <p className="mt-2 text-gray-600">Sign in to your account</p>
-          
+
           {checkoutMessage && (
             <div className="mt-3 bg-orange-50 border border-orange-200 rounded-lg p-2">
               <p className="text-orange-700 text-sm">{checkoutMessage}</p>
@@ -83,6 +117,16 @@ export default function LoginPage() {
           {error && (
             <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
               <p className="text-red-700 text-sm">{error}</p>
+              {emailNotVerified && (
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={resendLoading}
+                  className="mt-2 text-sm font-medium text-orange-600 hover:text-orange-700 disabled:opacity-50"
+                >
+                  {resendLoading ? 'Sending…' : 'Resend verification email'}
+                </button>
+              )}
             </div>
           )}
 
@@ -147,9 +191,15 @@ export default function LoginPage() {
               </div>
             </div>
 
+            <TurnstileWidget
+              onToken={setTurnstileToken}
+              onExpire={() => setTurnstileToken('')}
+              className="flex justify-center"
+            />
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || authLoading}
               className="w-full bg-orange-600 text-white py-2.5 rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 font-medium"
             >
               {loading ? 'Signing in...' : 'Sign In'}
@@ -167,8 +217,8 @@ export default function LoginPage() {
 
           {returnTo === '/checkout' && (
             <div className="mt-4 text-center">
-              <Link 
-                to="/cart" 
+              <Link
+                to="/cart"
                 className="text-sm text-gray-500 hover:text-orange-600 transition-colors"
               >
                 ← Back to Cart

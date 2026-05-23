@@ -7,6 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../api/supabase';
 import { toast } from 'react-hot-toast';
 import { MessageCircle, MapPin, Phone, CreditCard, DollarSign, Store, Navigation, MapPinned } from 'lucide-react';
+import LocationPinMap from '../components/checkout/LocationPinMap';
+import { formatAccuracyHint } from '../lib/geolocation';
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -27,6 +29,7 @@ export default function CheckoutPage() {
     deliveryAreasLoading,
     dynamicDeliveryFee,
     matchedDeliveryArea,
+    deliveryFeeNegotiated,
     deliveryFeeLoading,
     savedAddress,
     savedAddressLoading,
@@ -53,8 +56,10 @@ export default function CheckoutPage() {
     loadPickupBranches,
     setSelectedPickupBranchId,
     gpsLoading,
+    gpsAccuracy,
     setLocationInputMode,
     captureCurrentLocation,
+    updateGpsPin,
     clearGpsLocation,
   } = useCheckoutStore();
 
@@ -74,12 +79,16 @@ export default function CheckoutPage() {
     ? deliveryAreas.find(a => normalize(a.area_name) === normalizedCity) || null
     : null;
 
-  const requiresCustomLocation =
+  const isOutOfDeliveryArea =
     fulfillmentMode === 'delivery' &&
     !!normalizedCity &&
     deliveryAreas.length > 0 &&
-    !exactMatchedArea &&
-    !customLocationSelected;
+    !exactMatchedArea;
+
+  const requiresCustomLocation =
+    isOutOfDeliveryArea &&
+    !customLocationSelected &&
+    !deliveryFeeNegotiated;
 
   const citySuggestions = normalizedCity && deliveryAreas.length > 0
     ? deliveryAreas
@@ -498,7 +507,9 @@ export default function CheckoutPage() {
                             if (!companyId) return;
                             try {
                               await captureCurrentLocation(companyId);
-                              toast.success('Location captured — map will use this exact pin.');
+                              toast.success(
+                                'Location captured — drag the pin on the map if it is not on your gate or building.'
+                              );
                             } catch (err: any) {
                               toast.error(err?.message || 'Could not get your location.');
                             }
@@ -518,15 +529,41 @@ export default function CheckoutPage() {
                           </button>
                         )}
                       </div>
-                      {hasGpsPin && (
-                        <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm text-green-800">
-                          <p className="font-medium">Location captured</p>
-                          <p className="text-xs mt-1 text-green-700 line-clamp-2">
-                            {formData.locationLabel}
-                          </p>
-                          <p className="text-xs mt-1 text-green-600">
-                            {formData.deliveryLatitude?.toFixed(5)}, {formData.deliveryLongitude?.toFixed(5)}
-                          </p>
+                      {hasGpsPin &&
+                        formData.deliveryLatitude != null &&
+                        formData.deliveryLongitude != null && (
+                        <div className="space-y-2">
+                          {gpsAccuracy != null && (
+                            <p
+                              className={`text-xs px-2 py-1 rounded ${
+                                gpsAccuracy > 80
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                  : 'bg-green-50 text-green-800 border border-green-200'
+                              }`}
+                            >
+                              {formatAccuracyHint(gpsAccuracy)}
+                              {gpsAccuracy <= 200 && (
+                                <span className="block text-[11px] mt-0.5 opacity-90">
+                                  ±{Math.round(gpsAccuracy)}m — wait a few seconds outdoors for a better fix.
+                                </span>
+                              )}
+                            </p>
+                          )}
+                          <LocationPinMap
+                            latitude={formData.deliveryLatitude}
+                            longitude={formData.deliveryLongitude}
+                            accuracyM={gpsAccuracy}
+                            onLocationChange={(lat, lng) => {
+                              if (companyId) updateGpsPin(lat, lng, companyId);
+                              else updateGpsPin(lat, lng);
+                            }}
+                          />
+                          <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm text-green-800">
+                            <p className="font-medium">Delivery pin</p>
+                            <p className="text-xs mt-1 text-green-700 line-clamp-2">
+                              {formData.locationLabel}
+                            </p>
+                          </div>
                         </div>
                       )}
                       <div>
@@ -576,12 +613,12 @@ export default function CheckoutPage() {
                               )) : (
                                 <div className="p-3 text-sm text-gray-500">No matching areas.</div>
                               )}
-                              {requiresCustomLocation && (
+                              {isOutOfDeliveryArea && !deliveryFeeNegotiated && (
                                 <button type="button" onMouseDown={e => e.preventDefault()}
                                   onClick={() => { setCustomLocationSelected(true); setCityDropdownOpen(false); }}
                                   className="w-full text-left px-3 py-2 bg-orange-50 hover:bg-orange-100">
-                                  <div className="text-sm font-medium text-orange-700">Customize location</div>
-                                  <div className="text-xs text-orange-600">Using: {formData.city}</div>
+                                  <div className="text-sm font-medium text-orange-700">Continue outside delivery areas</div>
+                                  <div className="text-xs text-orange-600">Delivery fee to be negotiated — {formData.city}</div>
                                 </button>
                               )}
                             </>
@@ -591,8 +628,18 @@ export default function CheckoutPage() {
                     </div>
                     {requiresCustomLocation && (
                       <p className="text-xs text-amber-600 mt-1">
-                        Not in configured areas. Select <span className="font-medium">Customize location</span> to continue.
+                        This area is outside our standard delivery zones. Select{' '}
+                        <span className="font-medium">Continue outside delivery areas</span> — delivery fee will be negotiated.
                       </p>
+                    )}
+                    {deliveryFeeNegotiated && (
+                      <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        <p className="font-semibold">Delivery fee to be negotiated</p>
+                        <p className="mt-0.5">
+                          Your location is outside our standard delivery areas. You can still place your order;
+                          we will confirm the delivery fee with you before dispatch.
+                        </p>
+                      </div>
                     )}
                   </div>
                 </>
@@ -633,16 +680,26 @@ export default function CheckoutPage() {
               <div className="flex justify-between text-gray-600">
                 <span>{fulfillmentMode === 'pickup' ? 'Pickup' : 'Delivery Fee'}</span>
                 <span className={fulfillmentMode === 'pickup' ? 'text-green-600 font-medium' : ''}>
-                  {fulfillmentMode === 'pickup' ? 'Free' : deliveryFee === 0 ? 'Free' : `₵${deliveryFee.toFixed(2)}`}
+                  {fulfillmentMode === 'pickup'
+                    ? 'Free'
+                    : deliveryFeeNegotiated
+                    ? 'To be negotiated'
+                    : deliveryFee === 0
+                    ? 'Free'
+                    : `₵${deliveryFee.toFixed(2)}`}
                 </span>
               </div>
               {fulfillmentMode === 'delivery' && (
                 <div className="text-xs">
                   {deliveryFeeLoading
                     ? <span className="text-gray-500">Checking delivery pricing...</span>
+                    : deliveryFeeNegotiated
+                    ? <span className="text-amber-700 font-medium">Outside delivery areas — fee will be confirmed with you.</span>
                     : matchedDeliveryArea
                     ? <span className="text-green-600">Area matched: {matchedDeliveryArea}</span>
-                    : <span className="text-amber-600">Default delivery fee applied.</span>
+                    : formData.city?.trim()
+                    ? <span className="text-gray-500">Enter your city/area for delivery pricing.</span>
+                    : null
                   }
                 </div>
               )}
@@ -711,7 +768,7 @@ export default function CheckoutPage() {
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
                 <span>{step === 'redirecting' ? 'Redirecting to Paystack...' : 'Placing Order...'}</span>
               </div>
-            ) : requiresCustomLocation ? 'Select Customize Location to Continue'
+            ) : requiresCustomLocation ? 'Confirm Outside-Area Delivery to Continue'
               : formData.paymentMethod === 'card' ? `Pay ₵${grandTotal.toFixed(2)} via Paystack →`
               : fulfillmentMode === 'pickup' ? `Place Pickup Order • ₵${grandTotal.toFixed(2)}`
               : `Place Order • ₵${grandTotal.toFixed(2)}`

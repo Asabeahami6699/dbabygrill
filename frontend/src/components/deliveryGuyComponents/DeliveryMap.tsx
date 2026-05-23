@@ -56,6 +56,36 @@ const destinationIcon = L.divIcon({
   popupAnchor: [0, -38],
 });
 
+/** Tighter framing + higher zoom so roads are easier to read while driving. */
+const DRIVER_FOLLOW_ZOOM = 17;
+const DRIVER_ONLY_ZOOM = 17;
+const FIT_PADDING = 0.06;
+const FIT_MAX_ZOOM = 17;
+
+function fitDriverAndDestination(map: L.Map, driver: L.Marker, dest: L.Marker) {
+  const bounds = L.featureGroup([driver, dest]).getBounds().pad(FIT_PADDING);
+  map.fitBounds(bounds, { animate: true, maxZoom: FIT_MAX_ZOOM, padding: [40, 40] });
+}
+
+function focusOnDriver(map: L.Map, latlng: L.LatLng, animate = true) {
+  const targetZoom = Math.max(map.getZoom(), DRIVER_FOLLOW_ZOOM);
+  map.setView(latlng, targetZoom, { animate });
+}
+
+function googleMapsDirectionsUrl(
+  originLat: number,
+  originLng: number,
+  destLat: number,
+  destLng: number
+) {
+  return (
+    `https://www.google.com/maps/dir/?api=1` +
+    `&origin=${originLat},${originLng}` +
+    `&destination=${destLat},${destLng}` +
+    `&travelmode=driving`
+  );
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────
 interface DeliveryMapProps {
   // Driver live coords — passed directly from useLiveLocation (already in memory)
@@ -140,6 +170,7 @@ export default function DeliveryMap({
   const routeCasingRef  = useRef<L.Polyline | null>(null);
   const routeLineRef    = useRef<L.Polyline | null>(null);
   const hasAutoFit      = useRef(false);
+  const userPannedRef   = useRef(false);
 
   // ── Init map ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -157,7 +188,12 @@ export default function DeliveryMap({
     mapRef.current = map;
     setMapReady(true);
 
+    map.on('dragstart', () => {
+      userPannedRef.current = true;
+    });
+
     return () => {
+      map.off('dragstart');
       map.remove();
       mapRef.current          = null;
       driverMarkerRef.current = null;
@@ -165,6 +201,7 @@ export default function DeliveryMap({
       routeCasingRef.current  = null;
       routeLineRef.current    = null;
       hasAutoFit.current      = false;
+      userPannedRef.current    = false;
       setMapReady(false);
     };
   }, []);
@@ -191,20 +228,24 @@ export default function DeliveryMap({
         .addTo(map)
         .bindPopup(popup);
 
-      // First appearance — fit to show both markers if destination is ready
+      // First appearance — tight fit or driver-centered zoom
       if (!hasAutoFit.current) {
         if (destMarkerRef.current) {
-          const group = L.featureGroup([driverMarkerRef.current, destMarkerRef.current]);
-          map.fitBounds(group.getBounds().pad(0.25), { animate: true });
+          fitDriverAndDestination(map, driverMarkerRef.current, destMarkerRef.current);
         } else {
-          map.setView(latlng, 15, { animate: true });
+          map.setView(latlng, DRIVER_ONLY_ZOOM, { animate: true });
         }
         hasAutoFit.current = true;
+      } else if (!userPannedRef.current) {
+        focusOnDriver(map, latlng);
       }
     } else {
-      // Smooth position update — marker moves as GPS updates
+      // Smooth position update — follow driver unless they panned away
       driverMarkerRef.current.setLatLng(latlng);
       driverMarkerRef.current.setPopupContent(popup);
+      if (!userPannedRef.current) {
+        focusOnDriver(map, latlng);
+      }
     }
   }, [mapReady, driverLat, driverLng, driverSpeed, driverName, isOnline]);
 
@@ -236,7 +277,7 @@ export default function DeliveryMap({
         .bindPopup(popup);
       // Pan to dest if driver hasn't appeared yet
       if (!driverMarkerRef.current && !hasAutoFit.current) {
-        map.setView(pos, 15, { animate: true });
+        map.setView(pos, DRIVER_ONLY_ZOOM, { animate: true });
       }
     } else {
       destMarkerRef.current.setLatLng(pos);
@@ -261,27 +302,30 @@ export default function DeliveryMap({
     // White casing beneath
     if (!routeCasingRef.current) {
       routeCasingRef.current = L.polyline(latLngs, {
-        color: '#ffffff', weight: 9, opacity: 0.7,
+        color: '#ffffff', weight: 11, opacity: 0.85,
         lineCap: 'round', lineJoin: 'round',
       }).addTo(map);
     } else {
       routeCasingRef.current.setLatLngs(latLngs);
     }
 
-    // Orange route on top
+    // Orange route on top — thicker for visibility on bright OSM tiles
     if (!routeLineRef.current) {
       routeLineRef.current = L.polyline(latLngs, {
-        color: '#ea580c', weight: 5, opacity: 0.9,
+        color: '#ea580c', weight: 7, opacity: 0.95,
         lineCap: 'round', lineJoin: 'round',
       }).addTo(map);
     } else {
       routeLineRef.current.setLatLngs(latLngs);
     }
 
-    // Always fit both markers when route draws
-    if (driverMarkerRef.current && destMarkerRef.current) {
-      const group = L.featureGroup([driverMarkerRef.current, destMarkerRef.current]);
-      map.fitBounds(group.getBounds().pad(0.25), { animate: true });
+    // Fit once when route first appears (don't re-zoom on every GPS tick)
+    if (
+      !hasAutoFit.current &&
+      driverMarkerRef.current &&
+      destMarkerRef.current
+    ) {
+      fitDriverAndDestination(map, driverMarkerRef.current, destMarkerRef.current);
       hasAutoFit.current = true;
     }
   }, [mapReady, route]);
@@ -310,52 +354,51 @@ export default function DeliveryMap({
 
       {/* Offline notice — bottom center */}
       {hasDriver && !isOnline && (
-        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-[1000]">
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[1000]">
           <Badge color="gray">Driver is currently offline</Badge>
         </div>
       )}
 
-      {/* Directions button — bottom right */}
+      {/* Navigate in Google Maps — primary CTA for drivers */}
       {hasDriver && destLat != null && destLng != null && (
-        <div className="absolute bottom-3 right-3 z-[1000]">
+        <div className="absolute bottom-0 inset-x-0 z-[1000] p-3 pt-8 bg-gradient-to-t from-black/50 to-transparent pointer-events-none">
           <a
-            href={
-              `https://www.google.com/maps/dir/?api=1` +
-              `&origin=${driverLat},${driverLng}` +
-              `&destination=${destLat},${destLng}` +
-              `&travelmode=driving`
-            }
+            href={googleMapsDirectionsUrl(driverLat!, driverLng!, destLat, destLng)}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full text-xs font-semibold shadow border border-gray-200 text-orange-600 hover:bg-orange-50 transition-colors"
+            className="pointer-events-auto flex items-center justify-center gap-2.5 w-full py-3.5 px-4 rounded-xl text-sm font-bold shadow-lg border-2 border-white/20 bg-[#4285F4] text-white hover:bg-[#3367D6] active:scale-[0.98] transition-all"
           >
-            🧭 Directions
+            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z" />
+            </svg>
+            Navigate in Google Maps
+            <span className="text-xs font-normal opacity-90 hidden sm:inline">
+              — clearest roads &amp; turn-by-turn
+            </span>
           </a>
         </div>
       )}
 
-      {/* Re-center — bottom left */}
+      {/* Follow driver — above Google Maps bar */}
       {(hasDriver || destLat != null) && (
-        <div className="absolute bottom-3 left-3 z-[1000]">
+        <div className="absolute bottom-[4.5rem] left-3 z-[1000]">
           <button
+            type="button"
             onClick={() => {
               const map = mapRef.current;
               if (!map) return;
+              userPannedRef.current = false;
               if (driverMarkerRef.current && destMarkerRef.current) {
-                map.fitBounds(
-                  L.featureGroup([driverMarkerRef.current, destMarkerRef.current])
-                    .getBounds().pad(0.25),
-                  { animate: true }
-                );
+                fitDriverAndDestination(map, driverMarkerRef.current, destMarkerRef.current);
               } else if (driverMarkerRef.current) {
-                map.setView(driverMarkerRef.current.getLatLng(), 15, { animate: true });
+                focusOnDriver(map, driverMarkerRef.current.getLatLng());
               } else if (destMarkerRef.current) {
-                map.setView(destMarkerRef.current.getLatLng(), 15, { animate: true });
+                map.setView(destMarkerRef.current.getLatLng(), DRIVER_ONLY_ZOOM, { animate: true });
               }
             }}
-            className="inline-flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full text-xs font-semibold shadow border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+            className="inline-flex items-center gap-1.5 bg-white px-3 py-2 rounded-full text-xs font-semibold shadow-md border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            ⊕ Re-center
+            ⊕ Follow driver
           </button>
         </div>
       )}

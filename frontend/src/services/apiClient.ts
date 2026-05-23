@@ -4,6 +4,7 @@ import {
   getValidToken,
   clearTokenCache,
 } from './tokenManager';
+import { notifyNetworkError } from '../lib/networkNotifier';
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -44,6 +45,25 @@ api.interceptors.response.use(
 
   async (error) => {
     const originalRequest = error.config;
+
+    const isNetworkError =
+      !error.response &&
+      (error.code === 'ERR_NETWORK' ||
+        error.message === 'Network Error' ||
+        !navigator.onLine);
+
+    if (isNetworkError) {
+      notifyNetworkError(
+        navigator.onLine
+          ? 'Could not reach the server. Check your connection and try again.'
+          : 'No internet connection. Check your network and try again.'
+      );
+    } else if (error.response?.status === 503 && error.response?.data?.code === 'AUTH_SERVICE_UNAVAILABLE') {
+      notifyNetworkError(
+        error.response?.data?.error ||
+          'Authentication service is temporarily unavailable. Please try again.'
+      );
+    }
 
     console.error(
       '[api] response error:',
