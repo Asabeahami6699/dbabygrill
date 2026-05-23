@@ -1,6 +1,7 @@
 // backend/src/middleware/auth.middleware.ts
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
+import { displayNameFromAuthUser } from '../lib/authUserMeta';
 
 export interface User {
   id: string;
@@ -154,7 +155,10 @@ export const authenticate = async (
             id: user.id,
             email: user.email,
             role: user.user_metadata?.role || 'customer',
-            full_name: user.user_metadata?.full_name || '',
+            full_name:
+              user.user_metadata?.full_name ||
+              displayNameFromAuthUser(user) ||
+              '',
             phone: user.user_metadata?.phone || '',
             updated_at: new Date().toISOString()
           })

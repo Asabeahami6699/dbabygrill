@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../services/apiClient';
 import TurnstileWidget, { isTurnstileEnabled } from '../components/TurnstileWidget';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -195,6 +196,23 @@ export default function RegisterPage() {
         )}
 
         <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8">
+          <GoogleSignInButton
+            label="Sign up with Google"
+            onError={(msg) => setErrors({ form: msg })}
+          />
+          {errors.form && (
+            <p className="mt-2 text-sm text-red-600 text-center">{errors.form}</p>
+          )}
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white text-gray-500">or register with email</span>
+            </div>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Personal Information */}
             <div>

@@ -26,6 +26,7 @@ import ProfilePage from './pages/ProfilePage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import CompanyDashboard from './pages/company/CompanyDashboard';
 import PaymentCallback from './pages/PaymentCallback';
+import AuthCallbackPage from './pages/AuthCallbackPage';
 import DeliveryDashboard from './pages/deliveryGuy/Deliverydashboard';
 
 // ── Browser push permission (free Web Notifications API) ─────────────────────
@@ -106,6 +107,9 @@ function App() {
         <CartInitializer />
         <GlobalRealtimeChannels />
         <Routes>
+
+          {/* OAuth return — no chrome */}
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
           {/* Delivery dashboard — full screen, no Navbar/Footer */}
           <Route

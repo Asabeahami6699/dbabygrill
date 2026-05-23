@@ -19,6 +19,8 @@ interface AuthContextType {
   loading: boolean;
   isAuthReady: boolean;
   signIn: (email: string, password: string, turnstileToken?: string) => Promise<void>;
+  signInWithGoogle: (returnTo?: string) => Promise<void>;
+  setUserFromOAuth: (user: User) => void;
   signUp: (email: string, password: string, userData?: SignUpData) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -267,6 +269,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await supabase.auth.setSession(data.session);
   };
 
+  const signInWithGoogle = async (returnTo?: string) => {
+    const callbackUrl = new URL('/auth/callback', window.location.origin);
+    if (returnTo) {
+      callbackUrl.searchParams.set('returnTo', returnTo);
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: callbackUrl.toString(),
+      },
+    });
+
+    if (error) throw error;
+  };
+
+  const setUserFromOAuth = (oauthUser: User) => {
+    setUser(oauthUser);
+  };
+
   const signUp = async (email: string, password: string, userData?: SignUpData) => {
     await api.post('/auth/signup', {
       email,
@@ -294,7 +316,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, isAuthReady, signIn, signUp, signOut, refreshUser, updateProfile }}
+      value={{
+        user,
+        loading,
+        isAuthReady,
+        signIn,
+        signInWithGoogle,
+        setUserFromOAuth,
+        signUp,
+        signOut,
+        refreshUser,
+        updateProfile,
+      }}
     >
       {children}
     </AuthContext.Provider>

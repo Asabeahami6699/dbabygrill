@@ -3,6 +3,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/apiClient';
 import TurnstileWidget, { isTurnstileEnabled } from '../components/TurnstileWidget';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
@@ -123,6 +124,20 @@ export default function LoginPage() {
               )}
             </div>
           )}
+
+          <GoogleSignInButton
+            returnTo={returnTo}
+            onError={(msg) => setError(msg)}
+          />
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white text-gray-500">or sign in with email</span>
+            </div>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>

@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import { supabase, supabaseAuth } from '../config/supabase';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { verifyTurnstileToken } from '../lib/turnstile';
+import { displayNameFromAuthUser } from '../lib/authUserMeta';
 
 const router = Router();
 
@@ -259,7 +260,10 @@ router.post('/signin', async (req: Request, res: Response) => {
         .upsert({
           id: data.user.id,
           email: data.user.email,
-          full_name: data.user.user_metadata?.full_name || '',
+          full_name:
+            data.user.user_metadata?.full_name ||
+            displayNameFromAuthUser(data.user) ||
+            '',
           phone: data.user.user_metadata?.phone || '',
           role: data.user.user_metadata?.role || 'customer',
           updated_at: new Date().toISOString(),
@@ -330,6 +334,115 @@ router.post('/signout', async (req: Request, res: Response) => {
   // Nothing to do server-side — just acknowledge.
   // Frontend calls supabase.auth.signOut() directly after this.
   res.json({ success: true, message: 'Signed out successfully' });
+});
+
+// ======================
+// OAUTH SYNC (Google / other providers via Supabase)
+// Ensures public.users row exists and name is filled from provider metadata.
+// ======================
+router.post('/oauth-sync', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    const token = authHeader.split(' ')[1];
+
+    const { data: authResult, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !authResult.user) {
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+    const authUser = authResult.user;
+
+    const { data: deliveryGuy } = await supabase
+      .from('delivery_guys')
+      .select('id, full_name, phone, company_id, is_active')
+      .eq('user_id', authUser.id)
+      .single();
+
+    if (deliveryGuy) {
+      if (!deliveryGuy.is_active) {
+        return res.status(401).json({ error: 'Delivery guy account is inactive' });
+      }
+      return res.json({
+        success: true,
+        user: {
+          id: authUser.id,
+          email: authUser.email,
+          role: 'delivery_guy',
+          full_name: deliveryGuy.full_name,
+          phone: deliveryGuy.phone,
+          company_id: deliveryGuy.company_id,
+          delivery_guy_id: deliveryGuy.id,
+        },
+      });
+    }
+
+    const oauthName = displayNameFromAuthUser(authUser);
+    const { data: existingProfile } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', authUser.id)
+      .maybeSingle();
+
+    const { data: userProfile, error: profileError } = await supabase
+      .from('users')
+      .upsert(
+        {
+          id: authUser.id,
+          email: authUser.email,
+          role: existingProfile?.role || 'customer',
+          full_name: existingProfile?.full_name?.trim() || oauthName || '',
+          phone: existingProfile?.phone || '',
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      )
+      .select()
+      .single();
+
+    if (profileError) throw profileError;
+
+    let company = null;
+    if (userProfile?.role === 'company_admin') {
+      let companyId = userProfile.company_id;
+      if (!companyId) {
+        const { data: fallback } = await supabase
+          .from('companies')
+          .select('id')
+          .ilike('email', authUser.email || '')
+          .maybeSingle();
+        companyId = fallback?.id || null;
+        if (companyId) {
+          await supabase.from('users').update({ company_id: companyId }).eq('id', authUser.id);
+        }
+      }
+      if (companyId) {
+        const { data: companyData } = await supabase
+          .from('companies')
+          .select('id, name, location, phone, email, logo, description')
+          .eq('id', companyId)
+          .single();
+        company = companyData;
+      }
+    }
+
+    return res.json({
+      success: true,
+      user: {
+        id: authUser.id,
+        email: authUser.email,
+        role: userProfile?.role || 'customer',
+        full_name: userProfile?.full_name || oauthName,
+        phone: userProfile?.phone || '',
+        company_id: company?.id,
+        company,
+      },
+    });
+  } catch (error: any) {
+    console.error('OAuth sync error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to sync account' });
+  }
 });
 
 // ======================
