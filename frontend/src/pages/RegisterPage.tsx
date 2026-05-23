@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../services/apiClient';
 import TurnstileWidget, { isTurnstileEnabled } from '../components/TurnstileWidget';
 import GoogleSignInButton from '../components/GoogleSignInButton';
+import { requireEmailVerification } from '../lib/authConfig';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -120,7 +121,9 @@ export default function RegisterPage() {
 
       setSuccessMessage(
         data.message ||
-          'Registration successful! Please check your email to verify your account.'
+          (requireEmailVerification
+            ? 'Registration successful! Please check your email to verify your account.'
+            : 'Registration successful! You can sign in with your email and password.')
       );
       setTimeout(() => {
         navigate('/login');

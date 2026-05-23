@@ -13,6 +13,10 @@ const frontendBaseUrl = () =>
     ''
   );
 
+/** Enable when Supabase "Confirm email" is on and custom SMTP is configured. */
+const requireEmailVerification = () =>
+  process.env.REQUIRE_EMAIL_VERIFICATION === 'true';
+
 /** Only email_confirmed_at counts — confirmed_at alone can be set before the user clicks the link. */
 const isEmailVerified = (user: { email_confirmed_at?: string | null }) =>
   Boolean(user.email_confirmed_at);
@@ -54,17 +58,24 @@ router.post('/signup', async (req: Request, res: Response) => {
       return res.status(400).json({ error: captcha.error || 'Security verification failed' });
     }
 
+    const signUpOptions: {
+      emailRedirectTo?: string;
+      data: Record<string, string>;
+    } = {
+      data: {
+        full_name: fullName || '',
+        phone: phone || '',
+        role: role || 'customer',
+      },
+    };
+    if (requireEmailVerification()) {
+      signUpOptions.emailRedirectTo = emailConfirmRedirectUrl();
+    }
+
     const { data: authData, error: authError } = await supabaseAuth.auth.signUp({
       email,
       password,
-      options: {
-        emailRedirectTo: emailConfirmRedirectUrl(),
-        data: {
-          full_name: fullName || '',
-          phone: phone || '',
-          role: role || 'customer',
-        },
-      },
+      options: signUpOptions,
     });
 
     if (authError) throw authError;
@@ -129,8 +140,9 @@ router.post('/signup', async (req: Request, res: Response) => {
 
     res.status(201).json({
       success: true,
-      message:
-        'Account created. Please check your email and click the verification link before signing in.',
+      message: requireEmailVerification()
+        ? 'Account created. Please check your email and click the verification link before signing in.'
+        : 'Account created. You can sign in now.',
       user: {
         id: authData.user.id,
         email: authData.user.email,
@@ -148,6 +160,12 @@ router.post('/signup', async (req: Request, res: Response) => {
 // ======================
 router.post('/resend-verification', async (req: Request, res: Response) => {
   try {
+    if (!requireEmailVerification()) {
+      return res.status(400).json({
+        error: 'Email verification is not required. You can sign in with your password.',
+      });
+    }
+
     const { email } = req.body;
     if (!email?.trim()) {
       return res.status(400).json({ error: 'Email is required' });
@@ -198,7 +216,10 @@ router.post('/signin', async (req: Request, res: Response) => {
 
     if (error) {
       const msg = (error.message || '').toLowerCase();
-      if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
+      if (
+        requireEmailVerification() &&
+        (msg.includes('email not confirmed') || msg.includes('not confirmed'))
+      ) {
         return res.status(403).json({
           error:
             'Please verify your email before signing in. Check your inbox for the confirmation link.',
@@ -226,7 +247,7 @@ router.post('/signin', async (req: Request, res: Response) => {
       ? 'delivery_guy'
       : userPrecheck?.role || data.user.user_metadata?.role || 'customer';
 
-    if (role === 'customer' && !isEmailVerified(data.user)) {
+    if (requireEmailVerification() && role === 'customer' && !isEmailVerified(data.user)) {
       if (data.session) {
         await supabase.auth.admin.signOut(data.user.id, 'global');
       }

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../services/apiClient';
 import TurnstileWidget, { isTurnstileEnabled } from '../components/TurnstileWidget';
 import GoogleSignInButton from '../components/GoogleSignInButton';
+import { requireEmailVerification } from '../lib/authConfig';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [emailNotVerified, setEmailNotVerified] = useState(false);
+  const emailVerificationRequired = requireEmailVerification;
   const [turnstileToken, setTurnstileToken] = useState('');
   const { signIn, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -28,7 +30,7 @@ export default function LoginPage() {
   const loginNotice =
     returnTo !== '/checkout'
       ? stateMessage ||
-        (emailJustVerified
+        (emailVerificationRequired && emailJustVerified
           ? 'Email verified! You can sign in now.'
           : undefined)
       : undefined;
@@ -85,7 +87,10 @@ export default function LoginPage() {
       const code = err?.code;
       const errorMsg = (err.message || '').toLowerCase();
 
-      if (code === 'EMAIL_NOT_VERIFIED' || errorMsg.includes('verify your email')) {
+      if (
+        emailVerificationRequired &&
+        (code === 'EMAIL_NOT_VERIFIED' || errorMsg.includes('verify your email'))
+      ) {
         setEmailNotVerified(true);
         setError('Please verify your email before signing in. Check your inbox for the confirmation link.');
       } else if (errorMsg.includes('user') || errorMsg.includes('email') || errorMsg.includes('not found')) {
@@ -127,7 +132,7 @@ export default function LoginPage() {
           {error && (
             <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
               <p className="text-red-700 text-sm">{error}</p>
-              {emailNotVerified && (
+              {emailVerificationRequired && emailNotVerified && (
                 <button
                   type="button"
                   onClick={handleResendVerification}
