@@ -8,6 +8,12 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
 import { createNotification, notifyDeliveryGuys } from './notification.routes';
+import {
+  customerStatusNotification,
+  isPickupOrder,
+  paymentProcessedNotification,
+  pickupLocationForOrder,
+} from '../lib/orderFulfillmentNotifications';
 
 const supabaseServiceRole = createClient(
   process.env.SUPABASE_URL!,
@@ -563,12 +569,14 @@ router.patch(
       const { data: existingOrder, error: fetchError } = await supabase
         .from('orders')
         .select(`
-          status, 
-          company_id, 
+          status,
+          company_id,
           user_id,
           order_number,
           customer_name,
-          total
+          total,
+          pickup_branch_id,
+          delivery_address
         `)
         .eq('id', orderId)
         .single();
@@ -580,6 +588,11 @@ router.patch(
       if (existingOrder.company_id !== req.user?.company_id) {
         return res.status(403).json({ error: 'Unauthorized' });
       }
+
+      const orderIsPickup = isPickupOrder(existingOrder);
+      const pickupLocation = orderIsPickup
+        ? await pickupLocationForOrder(existingOrder.company_id, existingOrder)
+        : undefined;
 
       const orderedStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered'];
       const isCurrentInFlow = orderedStatuses.includes(existingOrder.status);
@@ -613,35 +626,6 @@ router.patch(
         });
       }
 
-      // Send notification to customer
-      const statusMessages: Record<string, { title: string; message: string; type: 'order' | 'payment' }> = {
-        confirmed: {
-          title: 'Order Confirmed ✅',
-          message: `Your order #${existingOrder.order_number} has been confirmed and is being prepared.`,
-          type: 'order'
-        },
-        preparing: {
-          title: 'Order Being Prepared 🍳',
-          message: `Great news! Your order #${existingOrder.order_number} is now being prepared by the chef.`,
-          type: 'order'
-        },
-        ready: {
-          title: 'Order Ready for Delivery 🛵',
-          message: `Your order #${existingOrder.order_number} is ready! A delivery partner will pick it up shortly.`,
-          type: 'order'
-        },
-        delivered: {
-          title: 'Order Delivered! 🎉',
-          message: `Your order #${existingOrder.order_number} has been delivered. Enjoy your meal!`,
-          type: 'order'
-        },
-        cancelled: {
-          title: 'Order Cancelled ❌',
-          message: `Your order #${existingOrder.order_number} has been cancelled.`,
-          type: 'order'
-        }
-      };
-
       let previousStatus = existingOrder.status;
       let latestOrder: any = null;
 
@@ -672,44 +656,57 @@ router.patch(
           message: `Order status updated to ${nextStatus}`
         });
 
-        if (statusMessages[nextStatus] && existingOrder.user_id) {
+        const statusNotice = customerStatusNotification(nextStatus, existingOrder.order_number, {
+          isPickup: orderIsPickup,
+          pickupLocation,
+          total: existingOrder.total,
+        });
+
+        if (statusNotice && existingOrder.user_id) {
           await createNotification(
             existingOrder.user_id,
             existingOrder.company_id,
-            statusMessages[nextStatus].type,
-            statusMessages[nextStatus].title,
-            statusMessages[nextStatus].message,
+            statusNotice.type,
+            statusNotice.title,
+            statusNotice.message,
             {
               orderId,
               status: nextStatus,
               orderNumber: existingOrder.order_number,
-              previousStatus
+              previousStatus,
+              fulfillment_mode: orderIsPickup ? 'pickup' : 'delivery',
             }
           );
         }
 
-        if (nextStatus === 'ready') {
+        if (nextStatus === 'ready' && !orderIsPickup) {
           await notifyDeliveryGuys(
             existingOrder.company_id,
             'order',
             '🛵 New Delivery Available',
-            `Order #${existingOrder.order_number} is ready for pickup.`,
+            `Order #${existingOrder.order_number} is ready for pickup by a delivery partner.`,
             { orderId, orderNumber: existingOrder.order_number, status: 'ready' }
           );
         }
 
         if (nextStatus === 'delivered') {
+          const paymentNotice = paymentProcessedNotification(
+            existingOrder.order_number,
+            existingOrder.total,
+            orderIsPickup
+          );
           await createNotification(
             existingOrder.user_id,
             existingOrder.company_id,
-            'payment',
-            'Payment Processed 💰',
-            `Your payment of ₵${existingOrder.total.toFixed(2)} for order #${existingOrder.order_number} has been processed successfully.`,
+            paymentNotice.type,
+            paymentNotice.title,
+            paymentNotice.message,
             {
               orderId,
               orderNumber: existingOrder.order_number,
               amount: existingOrder.total,
               status: 'delivered',
+              fulfillment_mode: orderIsPickup ? 'pickup' : 'delivery',
             }
           );
         }

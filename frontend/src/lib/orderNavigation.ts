@@ -50,6 +50,7 @@ export function inferStatusFromNotification(notification: {
   const text = `${notification.title || ''} ${notification.message || ''}`.toLowerCase();
   if (text.includes('delivered')) return 'delivered';
   if (text.includes('on the way') || text.includes('on its way')) return 'out_for_delivery';
+  if (text.includes('ready for pickup') || text.includes('collect it from')) return 'ready';
   if (text.includes('ready for delivery') || text.includes('order ready')) return 'ready';
   if (text.includes('being prepared') || text.includes('preparing')) return 'preparing';
   if (text.includes('confirmed')) return 'confirmed';

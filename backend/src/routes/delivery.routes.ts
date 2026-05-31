@@ -118,6 +118,7 @@ router.get('/orders', async (req: AuthRequest, res: Response) => {
         .eq('company_id', profile.company_id)
         .eq('status', 'ready')
         .is('delivery_guy_id', null)
+        .is('pickup_branch_id', null)
         .order('created_at', { ascending: true });
 
       // 2. Active orders assigned to this guy
@@ -155,6 +156,7 @@ router.get('/orders', async (req: AuthRequest, res: Response) => {
         .eq('company_id', profile.company_id)
         .eq('status', 'ready')
         .is('delivery_guy_id', null)
+        .is('pickup_branch_id', null)
         .order('created_at', { ascending: true });
     } else if (status === 'active') {
       query = query
@@ -201,12 +203,16 @@ router.patch('/orders/:orderId/accept', async (req: AuthRequest, res: Response) 
     // Verify order exists, is ready, unassigned and belongs to same company
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, status, company_id, delivery_guy_id, order_number, user_id')
+      .select('id, status, company_id, delivery_guy_id, order_number, user_id, pickup_branch_id')
       .eq('id', orderId)
       .single();
 
     if (orderError || !order) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (order.pickup_branch_id) {
+      return res.status(400).json({ error: 'This order is for customer pickup, not delivery.' });
     }
 
     if (order.company_id !== profile.company_id) {

@@ -414,6 +414,19 @@ export default function OrdersPage() {
                   {/* Expanded Details */}
                   {selectedOrder === order.id && (
                     <div className="border-t border-gray-100 bg-gray-50 p-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-gray-900">Order Details</h4>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOrder(null)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-200 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Close
+                        </button>
+                      </div>
                       {/* Delivery Info */}
                       <div className="bg-white rounded-lg p-3 space-y-2">
                         <h4 className="text-sm font-semibold text-gray-900 mb-2">Delivery Information</h4>
@@ -540,6 +553,13 @@ export default function OrdersPage() {
                           className="flex-1 px-4 py-2 border border-orange-600 text-orange-600 rounded-lg hover:bg-orange-50 transition-colors text-sm"
                         >
                           Reorder
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOrder(null)}
+                          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors text-sm"
+                        >
+                          Close
                         </button>
                       </div>
                     </div>

@@ -60,6 +60,8 @@ export interface Order {
   customer_name: string;
   customer_phone: string;
   customer_address: string;
+  delivery_address?: string;
+  pickup_branch_id?: string | null;
   special_instructions?: string;
   delivery_guy_id?: string;
   order_items: OrderItem[];

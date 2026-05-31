@@ -588,7 +588,7 @@ export default function CheckoutPage() {
                   )}
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">City / Area</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Delivery City/Area</label>
                     <div className="relative">
                       <input type="text" name="city" value={formData.city} onChange={handleInputChange}
                         readOnly={deliveryDetailsMode === 'saved' && !!savedAddress}

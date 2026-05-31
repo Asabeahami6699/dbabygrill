@@ -3,6 +3,7 @@ import { Order } from './hooks/useCompanyData';
 import { getValidToken } from '../../api/authToken';
 import { toast } from 'react-hot-toast';
 import { api } from '../../services/apiClient';
+import { isPickupOrder } from '../../lib/orderFulfillment';
 
 interface OrderDetailsModalProps {
   isOpen: boolean;
@@ -37,12 +38,26 @@ export default function OrderDetailsModal({
   // Reset local state whenever the modal opens for a (possibly different) order
   useEffect(() => {
     if (isOpen && order) {
-      fetchDeliveryGuys();
+      const pickup = isPickupOrder(order);
+      if (!pickup) {
+        fetchDeliveryGuys();
+      } else {
+        setDeliveryGuys([]);
+      }
       setSelectedGuyId(order.delivery_guy_id || '');
       setPendingReady(false);
       setSelectedStatus(null);
     }
   }, [isOpen, order]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
 
   const fetchDeliveryGuys = async () => {
     setLoadingGuys(true);
@@ -64,8 +79,10 @@ export default function OrderDetailsModal({
   const handleUpdateStatus = async (status: Order['status']) => {
     if (!order) return;
 
-    // "Ready" is special — show the delivery guy picker first, confirm second
-    if (status === 'ready' && !pendingReady) {
+    const orderIsPickup = isPickupOrder(order);
+
+    // Delivery orders: show delivery guy picker before marking ready
+    if (status === 'ready' && !pendingReady && !orderIsPickup) {
       setPendingReady(true);
       return;
     }
@@ -81,7 +98,7 @@ export default function OrderDetailsModal({
       }
 
       const payload: any = { status };
-      if (status === 'ready') {
+      if (status === 'ready' && !orderIsPickup) {
         payload.delivery_guy_id = selectedGuyId || null;
       }
 
@@ -89,7 +106,11 @@ export default function OrderDetailsModal({
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      toast.success(`Order status updated to ${status.replace(/_/g, ' ')}`);
+      toast.success(
+        orderIsPickup && status === 'ready'
+          ? 'Order marked ready for customer pickup'
+          : `Order status updated to ${status.replace(/_/g, ' ')}`
+      );
       onUpdateStatus();
       onClose();
     } catch (error: any) {
@@ -144,25 +165,44 @@ export default function OrderDetailsModal({
 
   if (!isOpen || !order) return null;
 
-  // ✅ All statuses including out_for_delivery shown in the modal
-  const allStatuses: Order['status'][] = [
-    'pending',
-    'confirmed',
-    'preparing',
-    'ready',
-    'out_for_delivery',
-    'delivered',
-    'cancelled',
-  ];
+  const orderIsPickup = isPickupOrder(order);
+
+  // All statuses including out_for_delivery shown in the modal (delivery only for out_for_delivery)
+  const allStatuses: Order['status'][] = orderIsPickup
+    ? ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled']
+    : [
+        'pending',
+        'confirmed',
+        'preparing',
+        'ready',
+        'out_for_delivery',
+        'delivered',
+        'cancelled',
+      ];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl p-4 sm:p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl p-4 sm:p-6 max-w-md w-full max-h-[80vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
 
         {/* ── Header ── */}
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg sm:text-xl font-bold">Order Details</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">✕</button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close order details"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         <div className="space-y-4">
@@ -179,7 +219,14 @@ export default function OrderDetailsModal({
             <p className="text-xs text-gray-500">Customer</p>
             <p className="font-medium">{order.customer_name}</p>
             <p className="text-sm text-gray-600">{order.customer_phone}</p>
-            <p className="text-sm text-gray-600">{order.customer_address}</p>
+            {orderIsPickup ? (
+              <div className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50 p-2.5">
+                <p className="text-xs font-semibold text-emerald-700 mb-0.5">Pickup order</p>
+                <p className="text-sm text-emerald-800">{order.customer_address || 'Pickup location not specified'}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600">{order.customer_address}</p>
+            )}
           </div>
 
           {/* ── Additional Notes ── */}
@@ -240,8 +287,8 @@ export default function OrderDetailsModal({
               </span>
             </div>
             <div className="flex justify-between items-center text-sm mt-1">
-              <span className="text-gray-600">Delivery Fee</span>
-              <span>₵{order.delivery_fee?.toFixed(2) || '0.00'}</span>
+              <span className="text-gray-600">{orderIsPickup ? 'Pickup' : 'Delivery Fee'}</span>
+              <span>{orderIsPickup ? 'Free' : `₵${order.delivery_fee?.toFixed(2) || '0.00'}`}</span>
             </div>
             <div className="flex justify-between items-center font-bold mt-2 pt-2 border-t">
               <span>Total</span>
@@ -257,12 +304,8 @@ export default function OrderDetailsModal({
             </p>
           </div>
 
-          {/* ══ ASSIGN DELIVERY GUY ══
-               Shows when:
-               (a) user clicked Ready and is confirming (pendingReady), OR
-               (b) order is already in ready state (allowing reassignment)
-          */}
-          {(pendingReady || order.status === 'ready') && (
+          {/* ══ ASSIGN DELIVERY GUY (delivery orders only) ══ */}
+          {!orderIsPickup && (pendingReady || order.status === 'ready') && (
             <div className="rounded-lg border border-purple-100 bg-purple-50 p-3">
               <label className="text-xs font-semibold text-purple-700 mb-2 block">
                 Assign Delivery Guy (optional)
@@ -354,14 +397,21 @@ export default function OrderDetailsModal({
                 );
               })}
             </div>
-            {pendingReady && (
+            {pendingReady && !orderIsPickup && (
               <p className="text-xs text-purple-600 mt-2">
                 ↑ Choose a delivery guy above, then confirm to mark as ready.
               </p>
             )}
-            <p className="text-xs text-gray-400 mt-2">
-              * "Out for Delivery" is set automatically when a delivery guy accepts the order.
-            </p>
+            {!orderIsPickup && (
+              <p className="text-xs text-gray-400 mt-2">
+                * "Out for Delivery" is set automatically when a delivery guy accepts the order.
+              </p>
+            )}
+            {orderIsPickup && (
+              <p className="text-xs text-emerald-600 mt-2">
+                * Pickup orders skip delivery assignment. Mark as Ready when the customer can collect.
+              </p>
+            )}
           </div>
 
           {/* ── Order Timeline ── */}
@@ -374,6 +424,14 @@ export default function OrderDetailsModal({
               </div>
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full mt-2 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>
