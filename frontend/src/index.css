@@ -65,6 +65,19 @@ html {
   outline: none;
 }
 
+/* Hide number input spinners; pair with wheel guard in main.tsx */
+@layer utilities {
+  .no-number-spin {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  .no-number-spin::-webkit-outer-spin-button,
+  .no-number-spin::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
 :focus-visible {
   outline: 2px solid #f97316;
   outline-offset: 2px;

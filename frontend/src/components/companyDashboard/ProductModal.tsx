@@ -253,7 +253,7 @@ export default function ProductModal({ isOpen, editingProduct, companyId, onClos
             value={stockQuantity}
             onChange={(e) => setStockQuantity(e.target.value)}
             required
-            className="w-full px-3 py-2 border rounded-lg text-sm"
+            className="w-full px-3 py-2 border rounded-lg text-sm no-number-spin"
           />
 
           {/* Variant toggle */}
@@ -297,7 +297,7 @@ export default function ProductModal({ isOpen, editingProduct, companyId, onClos
                     placeholder="Price (₵)"
                     value={variant.price}
                     onChange={(e) => updateVariant(idx, 'price', parseFloat(e.target.value) || 0)}
-                    className="w-28 px-2 py-1 border rounded text-sm"
+                    className="w-28 px-2 py-1 border rounded text-sm no-number-spin"
                   />
                   {variants.length > 1 && (
                     <button
@@ -324,7 +324,7 @@ export default function ProductModal({ isOpen, editingProduct, companyId, onClos
                 value={basePrice}
                 onChange={(e) => setBasePrice(e.target.value)}
                 required={!hasVariants}
-                className="w-full px-3 py-2 border rounded-lg text-sm"
+                className="w-full px-3 py-2 border rounded-lg text-sm no-number-spin"
               />
               <p className="text-xs text-gray-500 mt-1">For combos or products without size options.</p>
             </div>

@@ -241,6 +241,11 @@ export default function CheckoutPage() {
       }
     }
 
+    if (fulfillmentMode === 'pickup' && !selectedPickupBranchId) {
+      toast.error('Please select a pickup branch.');
+      return;
+    }
+
     try {
       if (formData.paymentMethod === 'cash') {
         const { orderId } = await submitCashOrder(items, grandTotal);

@@ -14,6 +14,13 @@ import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { supabase } from '../config/supabase';
 import { createNotification, notifyDeliveryGuys, notifyPlatformAdmins } from './notification.routes';
 import { buildDeliveryAddressInfo } from '../lib/deliveryAddress';
+import {
+  buildOrderFulfillmentSummary,
+  extractPickupFromForm,
+  formatPickupOrderAddress,
+  normalizeCheckoutFormData,
+  resolvePickupBranch,
+} from '../lib/pickupBranch';
 
 const router = Router();
 
@@ -82,6 +89,10 @@ router.post('/initiate', authenticate, async (req: AuthRequest, res: Response) =
           userId:     req.user!.id,
           companyId,
           deliveryFee: Number(deliveryFee) || 0,
+          fulfillmentMode: String(formData.fulfillmentMode || 'delivery'),
+          pickupBranchId: String(formData.pickupBranchId || ''),
+          pickupBranchName: String(formData.pickupBranchName || ''),
+          pickupBranchAddress: String(formData.pickupBranchAddress || ''),
           formData,
           // Explicitly coerce to numbers — Paystack may stringify on round-trip
           cartItems: cartItems.map((i: any) => ({
@@ -182,7 +193,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
     await createOrder({
       userId:       meta.userId,
       companyId:    meta.companyId,
-      formData:     meta.formData,
+      formData:     normalizeCheckoutFormData(meta.formData, meta),
       cartItems:    meta.cartItems,
       instructions: meta.itemInstructions || [],
       deliveryFee:  Number(meta.deliveryFee) || 0,
@@ -264,8 +275,34 @@ async function createOrder({
 
   const fulfillmentMode = formData.fulfillmentMode || 'delivery';
   const isPickup = fulfillmentMode === 'pickup';
-  const { deliveryAddress, deliveryLatitude, deliveryLongitude } =
+  const pickupFields = extractPickupFromForm(formData);
+  const pickupBranchId = pickupFields.pickupBranchId;
+  const pickupBranchNameFromClient = pickupFields.pickupBranchName;
+  const pickupBranchAddressFromClient = pickupFields.pickupBranchAddress;
+
+  const pickupBranch = isPickup
+    ? await resolvePickupBranch(
+        companyId,
+        pickupBranchId,
+        pickupBranchNameFromClient,
+        pickupBranchAddressFromClient
+      )
+    : null;
+  const resolvedPickupName = pickupBranch?.branch_name || pickupBranchNameFromClient || null;
+
+  let { deliveryAddress, deliveryLatitude, deliveryLongitude } =
     buildDeliveryAddressInfo(formData, isPickup);
+  if (isPickup) {
+    deliveryAddress = formatPickupOrderAddress(pickupBranch);
+  }
+
+  const fulfillmentSummary = buildOrderFulfillmentSummary({
+    isPickup,
+    paymentLabel: 'Card',
+    pickupBranch,
+    deliveryAddress,
+    paidPrefix: true,
+  });
 
   // UNIQUE constraint on payment_reference means a duplicate webhook call
   // gets error code 23505, which we catch below and skip safely.
@@ -291,7 +328,7 @@ async function createOrder({
       payment_transaction_id:  txnId,
       status:                  'confirmed',
       estimated_delivery_time: new Date(Date.now() + 45 * 60_000).toISOString(),
-      pickup_branch_id:        formData.pickupBranchId || null,
+      pickup_branch_id:        pickupBranchId,
     })
     .select('id, order_number')
     .single();
@@ -342,23 +379,13 @@ async function createOrder({
   // Notifications
   // ─────────────────────────────────────────────────────────
 
-  // Build human-readable fulfillment line used in both notifications
-  const paymentLabel      = 'Card';
-  const fulfillmentLabel  = isPickup ? 'Pickup' : 'Delivery';
-
-  // For pickup: show branch name if available, else generic "Pickup"
-  // For delivery: show the address that was stored on the order
-  const locationLine = isPickup
-    ? (formData.pickupBranchName ? `Branch: ${formData.pickupBranchName}` : 'Pickup from store')
-    : `Deliver to: ${deliveryAddress}`;
-
   // Customer notification
   createNotification(
     userId,
     companyId,
     'order',
     '✅ Order Confirmed!',
-    `Your order #${orderNumber} is confirmed.\nTotal: ₵${total.toFixed(2)} | Paid by ${paymentLabel} | ${fulfillmentLabel}\n${locationLine}`,
+    `Your order #${orderNumber} is confirmed.\nTotal: ₵${total.toFixed(2)} | ${fulfillmentSummary}`,
     {
       orderId:          order.id,
       orderNumber,
@@ -367,8 +394,8 @@ async function createOrder({
       payment_method:   'card',
       fulfillment_mode: fulfillmentMode,
       delivery_address: isPickup ? null : deliveryAddress,
-      pickup_branch_id: isPickup ? (formData.pickupBranchId || null) : null,
-      pickup_branch:    isPickup ? (formData.pickupBranchName || null) : null,
+      pickup_branch_id: isPickup ? pickupBranchId : null,
+      pickup_branch:    isPickup ? resolvedPickupName : null,
     }
   ).then(undefined, console.error);
 
@@ -380,11 +407,11 @@ async function createOrder({
     payment_method:   'card',
     fulfillment_mode: fulfillmentMode,
     delivery_address: isPickup ? null : deliveryAddress,
-    pickup_branch_id: isPickup ? (formData.pickupBranchId || null) : null,
-    pickup_branch:    isPickup ? (formData.pickupBranchName || null) : null,
+    pickup_branch_id: isPickup ? pickupBranchId : null,
+    pickup_branch:    isPickup ? resolvedPickupName : null,
   };
   const adminNotificationMessage =
-    `Order #${orderNumber} from ${formData.fullName}.\nTotal: ₵${total.toFixed(2)} | Paid by ${paymentLabel} | ${fulfillmentLabel}\n${locationLine}`;
+    `Order #${orderNumber} from ${formData.fullName}.\nTotal: ₵${total.toFixed(2)} | ${fulfillmentSummary}`;
 
   supabase
     .from('users')

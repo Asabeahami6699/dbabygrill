@@ -4,6 +4,13 @@ import { supabase } from '../config/supabase';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { createNotification, notifyDeliveryGuys, notifyPlatformAdmins } from './notification.routes';
 import { buildDeliveryAddressInfo, validateDeliveryForm } from '../lib/deliveryAddress';
+import {
+  buildOrderFulfillmentSummary,
+  extractPickupFromForm,
+  formatPickupOrderAddress,
+  paymentLabelForOrder,
+  resolvePickupBranch,
+} from '../lib/pickupBranch';
 
 const router = Router();
 
@@ -149,8 +156,14 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: deliveryValidation });
     }
 
-    const pickupBranchId   = formData.pickupBranchId   || null;
-    const pickupBranchName = formData.pickupBranchName || null;
+    const pickupFields = extractPickupFromForm(formData);
+    const pickupBranchId = pickupFields.pickupBranchId;
+    const pickupBranchName = pickupFields.pickupBranchName;
+    const pickupBranchAddress = pickupFields.pickupBranchAddress;
+
+    if (isPickup && !pickupBranchId && !pickupBranchName) {
+      return res.status(400).json({ error: 'Please select a pickup branch.' });
+    }
 
     // ============================
     // 2. FETCH REAL PRODUCT DATA FROM DATABASE
@@ -264,21 +277,30 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
     // 7. BUILD HUMAN-READABLE LABELS (reused in order + notifications)
     // ============================
     const paymentMethodRaw = formData.paymentMethod as string;
-    const paymentLabel =
-      paymentMethodRaw === 'cash'         ? 'Cash on Delivery' :
-      paymentMethodRaw === 'mobile_money' ? 'Mobile Money'     :
-      paymentMethodRaw === 'card'         ? 'Card'             :
-      paymentMethodRaw;
+    const paymentLabel = paymentLabelForOrder(paymentMethodRaw, isPickup);
 
-    const fulfillmentLabel = isPickup ? 'Pickup' : 'Delivery';
+    const pickupBranch = isPickup
+      ? await resolvePickupBranch(
+          companyId,
+          pickupBranchId,
+          pickupBranchName,
+          pickupBranchAddress
+        )
+      : null;
+    const resolvedPickupName = pickupBranch?.branch_name || pickupBranchName || null;
 
-    const { deliveryAddress, deliveryLatitude, deliveryLongitude } =
+    let { deliveryAddress, deliveryLatitude, deliveryLongitude } =
       buildDeliveryAddressInfo(formData, isPickup);
+    if (isPickup) {
+      deliveryAddress = formatPickupOrderAddress(pickupBranch);
+    }
 
-    // Location line shown in notifications
-    const locationLine = isPickup
-      ? (pickupBranchName ? `Branch: ${pickupBranchName}` : 'Pickup from store')
-      : `Deliver to: ${deliveryAddress}`;
+    const fulfillmentSummary = buildOrderFulfillmentSummary({
+      isPickup,
+      paymentLabel,
+      pickupBranch,
+      deliveryAddress,
+    });
 
     // ============================
     // 8. CREATE ORDER IN DATABASE
@@ -375,7 +397,7 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
         companyId,
         'order',
         '✅ Order Confirmed!',
-        `Your order #${orderNumber} is confirmed.\nTotal: ₵${total.toFixed(2)} | ${paymentLabel} | ${fulfillmentLabel}\n${locationLine}`,
+        `Your order #${orderNumber} is confirmed.\nTotal: ₵${total.toFixed(2)} | ${fulfillmentSummary}`,
         {
           orderId:          order.id,
           orderNumber,
@@ -386,7 +408,7 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
           fulfillment_mode: fulfillmentMode,
           delivery_address: isPickup ? null : deliveryAddress,
           pickup_branch_id: isPickup ? pickupBranchId   : null,
-          pickup_branch:    isPickup ? pickupBranchName  : null,
+          pickup_branch:    isPickup ? resolvedPickupName : null,
         }
       );
     }
@@ -408,10 +430,10 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
       fulfillment_mode: fulfillmentMode,
       delivery_address: isPickup ? null : deliveryAddress,
       pickup_branch_id: isPickup ? pickupBranchId   : null,
-      pickup_branch:    isPickup ? pickupBranchName  : null,
+      pickup_branch:    isPickup ? resolvedPickupName : null,
     };
     const adminNotificationMessage =
-      `Order #${orderNumber} from ${formData.fullName}.\nTotal: ₵${total.toFixed(2)} | ${paymentLabel} | ${fulfillmentLabel}\n${locationLine}`;
+      `Order #${orderNumber} from ${formData.fullName}.\nTotal: ₵${total.toFixed(2)} | ${fulfillmentSummary}`;
 
     if (companyAdmin?.id) {
       await createNotification(

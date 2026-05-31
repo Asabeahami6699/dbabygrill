@@ -148,6 +148,22 @@ const authFetch = async (url: string, method = 'GET', data?: any) => {
   return response.data;
 };
 
+const pickupPayloadFromStore = (state: CheckoutStore) => {
+  if (state.fulfillmentMode !== 'pickup') {
+    return {
+      pickupBranchId: undefined as string | undefined,
+      pickupBranchName: undefined as string | undefined,
+      pickupBranchAddress: undefined as string | undefined,
+    };
+  }
+  const branch = state.pickupBranches.find((b) => b.id === state.selectedPickupBranchId);
+  return {
+    pickupBranchId: state.selectedPickupBranchId || undefined,
+    pickupBranchName: branch?.branch_name,
+    pickupBranchAddress: branch?.address,
+  };
+};
+
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 export const useCheckoutStore = create<CheckoutStore>()(
@@ -440,7 +456,13 @@ export const useCheckoutStore = create<CheckoutStore>()(
 
       // ── Submit cash order ──
       submitCashOrder: async (cartItems, grandTotal) => {
-        const { formData, itemInstructions, fulfillmentMode, effectiveDeliveryFee, selectedPickupBranchId } = get();
+        const state = get();
+        const { formData, itemInstructions, fulfillmentMode, effectiveDeliveryFee } = state;
+        const pickupPayload = pickupPayloadFromStore(state);
+
+        if (fulfillmentMode === 'pickup' && !pickupPayload.pickupBranchId) {
+          throw new Error('Please select a pickup branch.');
+        }
 
         set({ step: 'submitting', error: null });
 
@@ -471,7 +493,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
             formData: {
               ...formData,
               fulfillmentMode,
-              pickupBranchId: fulfillmentMode === 'pickup' ? selectedPickupBranchId : undefined,
+              ...pickupPayload,
             },
             itemInstructions,
             deliveryFee: effectiveDeliveryFee(grandTotal - effectiveDeliveryFee(0)),
@@ -494,7 +516,14 @@ export const useCheckoutStore = create<CheckoutStore>()(
 
       // ── Initiate Paystack payment ──
       initiatePaystackPayment: async (cartItems, grandTotal, companyId) => {
-        const { formData, itemInstructions, fulfillmentMode, effectiveDeliveryFee, selectedPickupBranchId } = get();
+        const state = get();
+        const { formData, itemInstructions, fulfillmentMode, effectiveDeliveryFee } = state;
+        const pickupPayload = pickupPayloadFromStore(state);
+
+        if (fulfillmentMode === 'pickup' && !pickupPayload.pickupBranchId) {
+          throw new Error('Please select a pickup branch.');
+        }
+
         const deliveryFee = effectiveDeliveryFee(grandTotal);
 
         set({ step: 'redirecting', error: null });
@@ -516,7 +545,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
             formData: {
               ...formData,
               fulfillmentMode,
-              pickupBranchId: fulfillmentMode === 'pickup' ? selectedPickupBranchId : undefined,
+              ...pickupPayload,
             },
             itemInstructions,
           });
@@ -563,6 +592,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
         itemInstructions: state.itemInstructions,
         fulfillmentMode: state.fulfillmentMode,
         savedAddress: state.savedAddress,
+        selectedPickupBranchId: state.selectedPickupBranchId,
       }),
     }
   )
